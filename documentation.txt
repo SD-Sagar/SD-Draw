@@ -189,6 +189,96 @@ Option 5: Deploy on AWS (EC2 + RDS/DocumentDB)
    sudo apt-get install certbot python3-certbot-nginx
    sudo certbot --nginx -d yourdomain.com
 
+Option 6: Deploy on Render.com (Easy & Fast - Free Tier Available)
+-------------------------------------------------------------------
+Render is a modern cloud platform that makes deployment simple. You'll deploy the backend as a Web Service and frontend as a Static Site.
+
+STEP 1: Prepare Backend for Render
+1. Update backend/server.js to serve frontend static files (add at end of routes, before app.listen):
+   
+   // Serve frontend static files
+   const path = require('path');
+   app.use(express.static(path.join(__dirname, '../frontend/dist')));
+   
+   // Catch-all for SPA routing
+   app.get('*', (req, res) => {
+     res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+   });
+
+2. Update backend/package.json to include build script:
+   "scripts": {
+     "start": "node server.js",
+     "build": "cd ../frontend && npm install && npm run build && cd ../backend"
+   }
+
+STEP 2: Push to GitHub
+1. Create a GitHub repository and push your code:
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin https://github.com/yourusername/SD-Draw.git
+   git push -u origin main
+
+STEP 3: Deploy Backend on Render
+1. Create a Render.com account (free signup at render.com)
+2. Connect your GitHub account to Render
+3. Click "New +" and select "Web Service"
+4. Connect your SD-Draw repository and select the main branch
+5. Configure the Web Service:
+   - Name: sddraw-backend (or your preferred name)
+   - Environment: Node
+   - Build Command: npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend
+   - Start Command: cd backend && npm start
+   - Instance Type: Free (or Starter for production)
+6. Add environment variables under "Environment":
+   - PORT = 5000 (Render assigns this automatically, but set it explicitly)
+   - NODE_ENV = production
+   - JWT_SECRET = your_super_secret_key
+   - MONGO_URI = mongodb+srv://username:password@cluster.mongodb.net/sddraw?retryWrites=true&w=majority
+   - FRONTEND_URL = https://your-sddraw-frontend.onrender.com (set after frontend is deployed)
+7. Click "Create Web Service" and Render will deploy automatically
+8. Note your backend URL (e.g., https://sddraw-backend.onrender.com)
+
+STEP 4: Deploy Frontend on Render (Optional - Alternative to serving from backend)
+If you prefer to serve frontend separately as a Static Site:
+1. Click "New +" on Render dashboard and select "Static Site"
+2. Connect the same repository
+3. Configure the Static Site:
+   - Name: sddraw-frontend
+   - Build Command: npm install --prefix frontend && npm run build --prefix frontend
+   - Publish Directory: frontend/dist
+4. Add environment variable:
+   - VITE_API_URL = https://sddraw-backend.onrender.com/api
+5. Click "Create Static Site" and deploy
+
+Note: If you deploy frontend separately, ensure CORS is enabled in backend/server.js:
+   const cors = require('cors');
+   app.use(cors({
+     origin: 'https://your-sddraw-frontend.onrender.com',
+     credentials: true
+   }));
+
+STEP 5: Connect MongoDB
+1. Create a MongoDB Atlas account (free tier available at mongodb.com/cloud/atlas)
+2. Create a cluster and get your connection string
+3. Update MONGO_URI in Render environment variables with the MongoDB Atlas URI
+
+STEP 6: Manual Deploy Triggers
+- Render auto-deploys on every push to main branch
+- To manually trigger: Go to Render dashboard > Select service > Click "Manual Deploy"
+
+STEP 7: Monitor & Troubleshoot
+- View logs: Dashboard > Service > Logs
+- Check deployment status: Dashboard > Service > Events
+- For database issues, ensure your MongoDB Atlas IP whitelist includes Render's IP range (add 0.0.0.0/0 for testing, then restrict in production)
+
+TIPS FOR RENDER DEPLOYMENT:
+- The free tier includes 750 hours/month per service (sufficient for single-user/testing)
+- Free tier services spin down after 15 minutes of inactivity (add monitoring to keep alive)
+- For production, upgrade to Starter plan ($7/month) for always-on services
+- Render provides free SSL certificates automatically
+- Keep your Render services in the same region for optimal performance
+
 Production Environment Variables:
 ----------------------------------
 For all deployments, ensure these variables are set:
