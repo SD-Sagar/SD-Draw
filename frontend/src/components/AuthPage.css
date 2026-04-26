@@ -1,0 +1,144 @@
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: #1A1A1A;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+.auth-logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.logo-icon {
+  color: #007BFF;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.auth-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  background: linear-gradient(90deg, #007BFF, #00D2FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: pulse 2.5s infinite alternate ease-in-out;
+}
+
+.auth-subtitle {
+  font-size: 1.1rem;
+  color: #A0A0A0;
+  margin-top: 0.5rem;
+  letter-spacing: 1px;
+}
+
+.auth-form-card {
+  background-color: #2A2A2A;
+  padding: 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #333;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.9rem;
+  color: #D0D0D0;
+}
+
+.form-group input {
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background-color: #1A1A1A;
+  color: #fff;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #007BFF;
+}
+
+.auth-btn {
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  margin-top: 0.5rem;
+}
+
+.auth-btn:hover {
+  background-color: #0056b3;
+}
+
+.auth-btn:active {
+  transform: scale(0.98);
+}
+
+.auth-toggle {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  color: #A0A0A0;
+}
+
+.auth-toggle span {
+  color: #007BFF;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+.auth-toggle span:hover {
+  text-decoration: underline;
+}
+
+.auth-error {
+  color: #FF4D4D;
+  background-color: rgba(255, 77, 77, 0.1);
+  padding: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}

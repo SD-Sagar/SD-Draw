@@ -1,0 +1,20 @@
+:root {
+  --sagar-blue: #007BFF;
+  --charcoal: #1A1A1A;
+  --charcoal-light: #2A2A2A;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B0B0B0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--charcoal);
+  color: var(--text-primary);
+  overflow: hidden;
+}

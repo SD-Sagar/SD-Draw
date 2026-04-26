@@ -1,0 +1,124 @@
+.toolbox-container {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: fit-content;
+  min-width: 72px;
+  background-color: var(--charcoal-light);
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbox-header {
+  font-size: 10px;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.tool-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.tool-btn.active {
+  background-color: rgba(0, 123, 255, 0.2);
+  border-color: var(--sagar-blue);
+  color: var(--sagar-blue);
+}
+
+.toolbox-divider {
+  height: 1px;
+  background-color: #333;
+  margin: 4px 0;
+}
+
+.color-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-section label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.color-picker {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-picker::-webkit-color-swatch {
+  border-radius: 50%;
+  border: 2px solid #333;
+}
+
+.color-picker::-moz-color-swatch {
+  border-radius: 50%;
+  border: 2px solid #333;
+}
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+.actions-grid .action-btn:last-child {
+  grid-column: span 2;
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}

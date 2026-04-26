@@ -1,0 +1,54 @@
+SD-DRAW - DOCUMENTATION
+=======================
+
+Project Overview:
+-----------------
+SD-Draw is a professional-grade, MERN-stack (MongoDB, Express, React, Node.js) infinite vector canvas application. It features a sleek, MS Paint-inspired floating toolbox with a dynamic dark-mode user interface. 
+
+Architecture:
+-------------
+- Frontend: React + Vite
+- Canvas Engine: React-Konva (HTML5 Canvas wrapper for scalable vector graphics)
+- State Management: Zustand (handles global tool states, history stack, and active elements)
+- Backend: Node.js + Express
+- Database: MongoDB (Mongoose ORM)
+- Authentication: JWT (JSON Web Tokens) + Bcryptjs
+
+Key Features:
+-------------
+1. Infinite Canvas Engine:
+   - Middle-click to pan infinitely across the canvas.
+   - Scroll wheel to zoom in and out smoothly directly to the mouse cursor position.
+2. Vector Drawing Tools:
+   - Freehand Pencil and Eraser tools (with dynamic stroke thickness).
+   - Geometric Shapes: Line, Arrow, Rectangle, and Circle.
+3. Advanced Text Tool:
+   - Click anywhere to open a dynamically resizing HTML text input box.
+   - Text is seamlessly converted into vector graphics upon saving.
+   - Double-click (or single-click while the Text tool is active) to instantly re-open and edit existing text.
+4. User Authentication & Persistence:
+   - Full JWT-based login and registration system.
+   - Canvases are uniquely tied to your specific user account. 
+   - Backend includes a powerful "in-memory" fallback mechanism allowing the app to run without MongoDB (data rests in RAM until restart).
+5. State Control:
+   - Comprehensive Undo/Redo stack (Ctrl+Z, Ctrl+Y).
+   - "Delete" or "Backspace" selected elements instantly.
+6. Export:
+   - Save the active viewport directly to a high-resolution PNG.
+
+Directory Structure:
+--------------------
+/backend
+   /models
+      Canvas.js - Mongoose schema mapping arrays of vector elements to user IDs.
+      User.js - Secure authentication schema.
+   server.js - Express server and JWT API endpoints.
+/frontend
+   /src
+      /components
+         AuthPage.jsx - Login/Registration logic and animations.
+         CanvasEngine.jsx - The React-Konva core and event listener hub.
+         Toolbox.jsx - The floating sidebar UI.
+      /store
+         useCanvasStore.js - Zustand store for elements and history.
+      App.jsx - React Router routing rules.

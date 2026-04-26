@@ -1,0 +1,79 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { PenTool } from 'lucide-react';
+import './AuthPage.css';
+
+const AuthPage = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+    
+    try {
+      const res = await axios.post(`http://localhost:5000${endpoint}`, { username, password });
+      localStorage.setItem('sd_token', res.data.token);
+      localStorage.setItem('sd_user', res.data.username);
+      navigate('/draw');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Authentication failed. Make sure backend is running.');
+    }
+  };
+
+  return (
+    <div className="auth-container">
+      <div className="auth-logo-container">
+        <PenTool size={64} className="logo-icon" />
+        <h1 className="auth-title">Welcome to SD-Draw</h1>
+        <p className="auth-subtitle">Your infinite vector canvas.</p>
+      </div>
+
+      <div className="auth-form-card">
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {error && <div className="auth-error">{error}</div>}
+          
+          <div className="form-group">
+            <label>Username</label>
+            <input 
+              type="text" 
+              required 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Password</label>
+            <input 
+              type="password" 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+            />
+          </div>
+
+          <button type="submit" className="auth-btn">
+            {isLogin ? 'Login' : 'Create Account'}
+          </button>
+        </form>
+
+        <div className="auth-toggle">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}
+          <span onClick={() => setIsLogin(!isLogin)}>
+            {isLogin ? 'Register here' : 'Login here'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AuthPage;
