@@ -52,3 +52,194 @@ Directory Structure:
       /store
          useCanvasStore.js - Zustand store for elements and history.
       App.jsx - React Router routing rules.
+
+DEPLOYMENT INSTRUCTIONS
+=======================
+
+Prerequisites for Deployment:
+-----------------------------
+- Node.js (v16 or higher)
+- MongoDB Atlas account (for cloud database) OR local MongoDB
+- A hosting provider account (Heroku, Railway, AWS, Vercel, etc.)
+- Git repository (GitHub, GitLab, Bitbucket)
+
+Option 1: Deploy on Railway.app (Recommended - Simple & Free Tier Available)
+---------------------------------------------------------------------------
+1. Create a Railway.app account and connect your GitHub repository.
+2. Create a new project and select "Deploy from GitHub".
+3. Create a MongoDB service in Railway dashboard.
+4. Add environment variables in Railway:
+   - PORT=5000
+   - JWT_SECRET=your_super_secret_key
+   - MONGO_URI=<MongoDB connection string from Railway>
+   - NODE_ENV=production
+5. Build configuration (Railway auto-detects):
+   - Root directory: /
+   - Build command: npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend
+   - Start command: cd backend && npm start
+6. Deploy and Railway will automatically handle restarts and scaling.
+
+Option 2: Deploy Frontend on Vercel + Backend on Railway
+---------------------------------------------------------
+Frontend on Vercel:
+1. Push your /frontend folder to a GitHub repository.
+2. Connect GitHub to Vercel and select the repository.
+3. Set build settings:
+   - Framework: Vite
+   - Build command: npm run build
+   - Output directory: dist
+4. Add environment variable:
+   - VITE_API_URL=https://your-backend-domain.com/api
+5. Deploy.
+
+Backend on Railway:
+(Follow Option 1 steps for backend deployment)
+
+Option 3: Deploy with Docker & Docker Compose (For Any Cloud Platform)
+------------------------------------------------------------------------
+1. Create Dockerfile in project root:
+   FROM node:18-alpine
+   WORKDIR /app
+   
+   # Install and build frontend
+   COPY frontend/package*.json frontend/
+   RUN cd frontend && npm install && npm run build
+   
+   # Setup backend
+   COPY backend/package*.json backend/
+   RUN cd backend && npm install
+   
+   # Copy all files
+   COPY . .
+   
+   # Expose port
+   EXPOSE 5000
+   
+   # Start backend (frontend is served from public folder)
+   CMD ["node", "backend/server.js"]
+
+2. Update backend server.js to serve frontend build:
+   app.use(express.static(path.join(__dirname, '../frontend/dist')));
+   app.get('*', (req, res) => {
+     res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+   });
+
+3. Build and run:
+   docker build -t sddraw:latest .
+   docker run -p 5000:5000 \
+     -e MONGO_URI="your_mongodb_uri" \
+     -e JWT_SECRET="your_secret" \
+     sddraw:latest
+
+4. Push to container registry (Docker Hub, AWS ECR, etc.) and deploy.
+
+Option 4: Deploy on Heroku (Legacy - Older but Stable)
+-------------------------------------------------------
+1. Install Heroku CLI and login:
+   heroku login
+   
+2. Create a Heroku app:
+   heroku create your-app-name
+   
+3. Add MongoDB Atlas connection:
+   heroku config:set MONGO_URI="your_mongodb_uri"
+   heroku config:set JWT_SECRET="your_secret_key"
+   
+4. Create Procfile in root directory:
+   web: cd backend && npm start
+
+5. Build frontend before pushing:
+   cd frontend && npm run build && cd ..
+
+6. Push to Heroku:
+   git push heroku main
+
+Option 5: Deploy on AWS (EC2 + RDS/DocumentDB)
+-----------------------------------------------
+1. Launch an EC2 instance (Ubuntu 20.04 LTS recommended).
+2. Connect via SSH and install Node.js:
+   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+
+3. Clone your GitHub repository:
+   git clone https://github.com/yourusername/SD-Draw.git
+
+4. Setup backend:
+   cd SD-Draw/backend
+   npm install
+   create .env file with MONGO_URI and JWT_SECRET
+   npm install -g pm2
+   pm2 start server.js --name "sddraw-backend"
+
+5. Build and serve frontend:
+   cd ../frontend
+   npm install && npm run build
+   npm install -g serve
+   serve -s dist -l 3000
+
+6. Setup MongoDB:
+   - Use AWS DocumentDB or MongoDB Atlas for managed database
+   - Update MONGO_URI in backend .env
+
+7. Setup Nginx as reverse proxy (optional but recommended):
+   sudo apt-get install nginx
+   Configure /etc/nginx/sites-available/default to proxy to ports 5000 (backend) and 3000 (frontend)
+
+8. Setup SSL with Let's Encrypt:
+   sudo apt-get install certbot python3-certbot-nginx
+   sudo certbot --nginx -d yourdomain.com
+
+Production Environment Variables:
+----------------------------------
+For all deployments, ensure these variables are set:
+- NODE_ENV=production
+- JWT_SECRET=your_very_secure_random_key (use a strong random string)
+- MONGO_URI=your_mongodb_connection_string
+- PORT=5000 (or as specified by hosting platform)
+- FRONTEND_URL=https://yourdomain.com (for CORS configuration)
+- BACKEND_URL=https://api.yourdomain.com (for frontend API calls)
+
+MongoDB Setup:
+--------------
+- MongoDB Atlas (Recommended for production):
+  1. Go to mongodb.com/cloud/atlas
+  2. Create a cluster (free tier available)
+  3. Get connection string: mongodb+srv://username:password@cluster.mongodb.net/dbname
+  4. Use this as MONGO_URI in backend
+
+- Self-hosted MongoDB:
+  1. Install MongoDB on your server
+  2. MONGO_URI: mongodb://username:password@hostname:27017/dbname
+
+Performance Optimization for Production:
+----------------------------------------
+1. Enable gzip compression in backend (express-compression package)
+2. Set appropriate cache headers for static assets
+3. Use a CDN for frontend assets
+4. Implement rate limiting on API endpoints (express-rate-limit)
+5. Add HTTPS everywhere with proper SSL certificates
+6. Monitor logs and set up error tracking (Sentry, LogRocket)
+7. Use PM2 or similar process manager for Node.js with auto-restart
+8. Implement database indexing for frequently queried fields
+
+Security Checklist:
+-------------------
+[] JWT_SECRET is a strong random string (32+ characters)
+[] MONGO_URI uses strong password authentication
+[] CORS is properly configured for your domain
+[] Environment variables are NOT committed to git
+[] HTTPS is enabled for all connections
+[] Rate limiting is enabled on auth endpoints
+[] Input validation is implemented
+[] Database backups are configured
+[] Error messages don't expose sensitive information
+[] Monitor for suspicious activity
+
+Troubleshooting Deployment:
+---------------------------
+- Port already in use: Change PORT in .env or kill process using port
+- MongoDB connection error: Verify MONGO_URI is correct and IP whitelist on MongoDB Atlas
+- CORS errors: Update CORS origins in backend/server.js to match frontend domain
+- Frontend routing 404: Ensure server redirects all routes to index.html
+- Build fails: Clear node_modules and reinstall with npm install
+- Memory issues: Increase container memory allocation or enable swap on server
