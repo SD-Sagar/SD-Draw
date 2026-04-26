@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 
 const Canvas = require('./models/Canvas');
 const User = require('./models/User');
@@ -11,6 +12,9 @@ const User = require('./models/User');
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 const memoryDb = new Map();
 const userMemoryDb = new Map(); // fallback for users
@@ -130,6 +134,11 @@ app.put('/api/canvas', authMiddleware, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Fallback for React Router - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 const PORT = process.env.PORT || 5000;
