@@ -17,7 +17,7 @@ const AuthPage = () => {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     
     try {
-      const res = await axios.post(`http://localhost:5000${endpoint}`, { username, password });
+      const res = await axios.post(endpoint, { username, password });
       localStorage.setItem('sd_token', res.data.token);
       localStorage.setItem('sd_user', res.data.username);
       navigate('/draw');

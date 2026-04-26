@@ -15,7 +15,7 @@ const Toolbox = () => {
   const handleSave = async () => {
     try {
       const token = localStorage.getItem('sd_token');
-      await axios.put(`http://localhost:5000/api/canvas`, { elements }, {
+      await axios.put(`/api/canvas`, { elements }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Canvas saved successfully!');
@@ -27,7 +27,7 @@ const Toolbox = () => {
   const handleLoad = async () => {
     try {
       const token = localStorage.getItem('sd_token');
-      const res = await axios.get(`http://localhost:5000/api/canvas`, {
+      const res = await axios.get(`/api/canvas`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setElements(res.data, false);
