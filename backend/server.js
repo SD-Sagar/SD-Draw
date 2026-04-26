@@ -137,7 +137,7 @@ app.put('/api/canvas', authMiddleware, async (req, res) => {
 });
 
 // Fallback for React Router - serve index.html for all non-API routes
-app.get('*', (req, res) => {
+app.get('/:path(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
