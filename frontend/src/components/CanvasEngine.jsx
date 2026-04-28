@@ -251,7 +251,7 @@ const CanvasEngine = () => {
     if (tool === 'pencil' || tool === 'eraser') {
       newElement.points = [pos.x, pos.y];
       if (tool === 'eraser') {
-        newElement.stroke = '#1A1A1A'; // Erase by matching bg color
+        newElement.stroke = '#000000'; // Color doesn't matter — destination-out ignores it
         newElement.strokeWidth = eraserSize;
       }
     } else if (tool === 'line' || tool === 'arrow') {
@@ -454,8 +454,9 @@ const CanvasEngine = () => {
 
     switch (el.type) {
       case 'pencil':
-      case 'eraser':
         return <Line {...commonProps} points={el.points} stroke={el.stroke} strokeWidth={el.strokeWidth} tension={0.5} lineCap="round" lineJoin="round" x={el.x || 0} y={el.y || 0} />;
+      case 'eraser':
+        return <Line key={el.id} id={el.id} points={el.points} stroke={el.stroke} strokeWidth={el.strokeWidth} tension={0.5} lineCap="round" lineJoin="round" x={el.x || 0} y={el.y || 0} globalCompositeOperation="destination-out" draggable={false} listening={false} />;
       case 'line':
         return <Line {...commonProps} points={el.points} stroke={el.stroke} strokeWidth={el.strokeWidth} x={el.x || 0} y={el.y || 0} />;
       case 'arrow':
