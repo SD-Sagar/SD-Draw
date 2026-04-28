@@ -7,6 +7,8 @@
   background-color: #1A1A1A;
   color: #fff;
   font-family: 'Inter', sans-serif;
+  padding: 1rem;
+  box-sizing: border-box;
 }
 
 .auth-logo-container {
@@ -29,6 +31,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: pulse 2.5s infinite alternate ease-in-out;
+  text-align: center;
 }
 
 .auth-subtitle {
@@ -36,6 +39,7 @@
   color: #A0A0A0;
   margin-top: 0.5rem;
   letter-spacing: 1px;
+  text-align: center;
 }
 
 .auth-form-card {
@@ -46,6 +50,7 @@
   width: 100%;
   max-width: 400px;
   border: 1px solid #333;
+  box-sizing: border-box;
 }
 
 .auth-form {
@@ -73,6 +78,8 @@
   color: #fff;
   font-size: 1rem;
   transition: border-color 0.3s;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .form-group input:focus {
@@ -91,6 +98,7 @@
   cursor: pointer;
   transition: background-color 0.3s, transform 0.1s;
   margin-top: 0.5rem;
+  width: 100%;
 }
 
 .auth-btn:hover {
@@ -140,5 +148,72 @@
   100% {
     transform: scale(1);
     opacity: 0.9;
+  }
+}
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 480px) {
+  .auth-logo-container {
+    margin-bottom: 1.2rem;
+  }
+
+  .logo-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .auth-title {
+    font-size: 1.6rem;
+  }
+
+  .auth-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .auth-form-card {
+    padding: 1.5rem;
+  }
+
+  .auth-form {
+    gap: 1rem;
+  }
+
+  .form-group input {
+    padding: 0.7rem 0.8rem;
+    font-size: 0.95rem;
+  }
+
+  .auth-btn {
+    padding: 0.8rem;
+    font-size: 1rem;
+  }
+
+  .auth-toggle {
+    font-size: 0.8rem;
+  }
+}
+
+/* ====== SMALL HEIGHT SCREENS (landscape phones) ====== */
+@media (max-height: 500px) {
+  .auth-container {
+    justify-content: flex-start;
+    padding-top: 0.5rem;
+  }
+
+  .auth-logo-container {
+    margin-bottom: 0.5rem;
+  }
+
+  .auth-title {
+    font-size: 1.4rem;
+    margin-top: 0.5rem;
+  }
+
+  .auth-form-card {
+    padding: 1rem;
+  }
+
+  .auth-form {
+    gap: 0.6rem;
   }
 }

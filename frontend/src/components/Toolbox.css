@@ -13,6 +13,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
 }
 
 .toolbox-header {
@@ -121,4 +123,95 @@
 .action-btn:hover {
   background-color: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
+}
+
+/* ====== MOBILE RESPONSIVE (screens < 600px) ====== */
+@media (max-width: 600px) {
+  .toolbox-container {
+    position: fixed;
+    top: auto;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    min-width: unset;
+    border-radius: 12px 12px 0 0;
+    padding: 6px 8px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .toolbox-header {
+    display: none;
+  }
+
+  .toolbox-divider {
+    width: 1px;
+    height: 28px;
+    min-width: 1px;
+    margin: 0 2px;
+  }
+
+  .tools-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .tool-btn {
+    padding: 8px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .color-section {
+    flex-direction: row;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .color-section label {
+    display: none;
+  }
+
+  .actions-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .actions-grid .action-btn:last-child {
+    grid-column: auto;
+  }
+
+  .action-btn {
+    padding: 8px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* ====== TABLET RESPONSIVE (600px - 900px) ====== */
+@media (min-width: 601px) and (max-width: 900px) {
+  .toolbox-container {
+    top: 10px;
+    left: 10px;
+    padding: 6px;
+    min-width: 60px;
+  }
+
+  .tool-btn {
+    padding: 5px;
+  }
+
+  .action-btn {
+    padding: 5px;
+  }
 }

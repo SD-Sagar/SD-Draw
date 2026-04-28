@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
@@ -11,10 +11,12 @@ const CanvasEngine = () => {
   const [currentElement, setCurrentElement] = useState(null);
   const [textInput, setTextInput] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [lastPinchDist, setLastPinchDist] = useState(null);
 
   const stageRef = useRef(null);
   const trRef = useRef(null);
   const textareaRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     if (textInput && textareaRef.current) {
@@ -41,6 +43,28 @@ const CanvasEngine = () => {
     handleResize();
 
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Prevent default touch behavior on canvas container (prevents page scroll/zoom while drawing)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventTouch = (e) => {
+      // Allow default on textarea/input for text editing
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+    };
+
+    container.addEventListener('touchstart', preventTouch, { passive: false });
+    container.addEventListener('touchmove', preventTouch, { passive: false });
+    container.addEventListener('touchend', preventTouch, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', preventTouch);
+      container.removeEventListener('touchmove', preventTouch);
+      container.removeEventListener('touchend', preventTouch);
+    };
   }, []);
 
   // Export functionality
@@ -138,14 +162,40 @@ const CanvasEngine = () => {
     setPosition(newPos);
   };
 
-  const handleMouseDown = (e) => {
+  // Helper: get clientX/clientY from either mouse or touch event
+  const getClientPos = (evt) => {
+    if (evt.touches && evt.touches.length > 0) {
+      return { clientX: evt.touches[0].clientX, clientY: evt.touches[0].clientY };
+    }
+    if (evt.changedTouches && evt.changedTouches.length > 0) {
+      return { clientX: evt.changedTouches[0].clientX, clientY: evt.changedTouches[0].clientY };
+    }
+    return { clientX: evt.clientX, clientY: evt.clientY };
+  };
+
+  // Helper: get distance between two touch points (for pinch zoom)
+  const getTouchDist = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Unified pointer-down handler (works for both mouse and touch)
+  const handlePointerDown = (e) => {
     if (textInput) {
-      // If clicking while typing, finish text input
       handleTextareaBlur();
       return;
     }
 
-    if (e.evt.button === 1 || e.evt.button === 2) return; // middle/right click for panning
+    const evt = e.evt;
+    // For mouse: skip middle/right click
+    if (evt.button === 1 || evt.button === 2) return;
+
+    // For touch: if two fingers, start pinch — don't draw
+    if (evt.touches && evt.touches.length === 2) {
+      setLastPinchDist(getTouchDist(evt.touches));
+      return;
+    }
 
     const stage = stageRef.current;
     const pos = getRelativePointerPosition(stage);
@@ -171,11 +221,12 @@ const CanvasEngine = () => {
         }
       }
 
+      const { clientX, clientY } = getClientPos(evt);
       setTextInput({
         x: pos.x,
         y: pos.y,
-        screenX: e.evt.clientX,
-        screenY: e.evt.clientY,
+        screenX: clientX,
+        screenY: clientY,
         value: '',
         width: 150
       });
@@ -216,7 +267,39 @@ const CanvasEngine = () => {
     setCurrentElement(newElement);
   };
 
-  const handleMouseMove = (e) => {
+  // Unified pointer-move handler
+  const handlePointerMove = (e) => {
+    const evt = e.evt;
+
+    // Handle pinch-to-zoom with two fingers
+    if (evt.touches && evt.touches.length === 2) {
+      e.evt.preventDefault();
+      const newDist = getTouchDist(evt.touches);
+      if (lastPinchDist) {
+        const stage = stageRef.current;
+        const oldScale = stage.scaleX();
+        const scaleChange = newDist / lastPinchDist;
+        const newScale = oldScale * scaleChange;
+
+        // Get center of two fingers for zoom-to-center
+        const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2;
+        const cy = (evt.touches[0].clientY + evt.touches[1].clientY) / 2;
+
+        const mousePointTo = {
+          x: (cx - stage.x()) / oldScale,
+          y: (cy - stage.y()) / oldScale,
+        };
+
+        setScale(newScale);
+        setPosition({
+          x: cx - mousePointTo.x * newScale,
+          y: cy - mousePointTo.y * newScale,
+        });
+      }
+      setLastPinchDist(newDist);
+      return;
+    }
+
     if (!isDrawing || !currentElement) return;
 
     const stage = stageRef.current;
@@ -240,7 +323,11 @@ const CanvasEngine = () => {
     setCurrentElement(updatedElement);
   };
 
-  const handleMouseUp = () => {
+  // Unified pointer-up handler
+  const handlePointerUp = () => {
+    // Reset pinch state
+    setLastPinchDist(null);
+
     if (!isDrawing) return;
     setIsDrawing(false);
 
@@ -370,21 +457,35 @@ const CanvasEngine = () => {
       case 'circle':
         return <Circle {...commonProps} x={el.x} y={el.y} radius={el.radius} stroke={el.stroke} strokeWidth={el.strokeWidth} fill={el.fill} />;
       case 'text':
-        return <Text {...commonProps} x={el.x} y={el.y} text={el.text} width={el.width} fill={el.fill} fontSize={20} fontFamily="sans-serif" onDblClick={(e) => handleTextDblClick(e, el)} visible={!textInput || textInput.id !== el.id} />;
+        return <Text {...commonProps} x={el.x} y={el.y} text={el.text} width={el.width} fill={el.fill} fontSize={20} fontFamily="sans-serif" onDblClick={(e) => handleTextDblClick(e, el)} onDblTap={(e) => handleTextDblClick(e, el)} visible={!textInput || textInput.id !== el.id} />;
       default:
         return null;
     }
   };
 
   return (
-    <div style={{ position: 'relative', backgroundColor: '#1A1A1A', width: '100vw', height: '100vh', overflow: 'hidden', cursor: tool === 'select' ? 'default' : (tool === 'text' ? 'text' : 'crosshair') }}>
+    <div
+      ref={containerRef}
+      style={{
+        position: 'relative',
+        backgroundColor: '#1A1A1A',
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        cursor: tool === 'select' ? 'default' : (tool === 'text' ? 'text' : 'crosshair'),
+        touchAction: 'none'
+      }}
+    >
       <Stage
         width={window.innerWidth}
         height={window.innerHeight}
         onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
         scaleX={scale}
         scaleY={scale}
         x={position.x}
