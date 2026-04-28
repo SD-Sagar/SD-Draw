@@ -125,6 +125,84 @@
   color: var(--text-primary);
 }
 
+/* Eraser Size Controls */
+.eraser-size-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.eraser-size-section label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.eraser-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.size-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #444;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.size-btn:hover {
+  background-color: rgba(0, 123, 255, 0.2);
+  color: var(--sagar-blue);
+  border-color: var(--sagar-blue);
+}
+
+.size-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 18px;
+  text-align: center;
+}
+
+.eraser-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #444;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.eraser-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sagar-blue, #007BFF);
+  cursor: pointer;
+}
+
+.eraser-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sagar-blue, #007BFF);
+  border: none;
+  cursor: pointer;
+}
+
 /* ====== MOBILE RESPONSIVE (screens < 600px) ====== */
 @media (max-width: 600px) {
   .toolbox-container {
@@ -195,6 +273,50 @@
     padding: 8px;
     min-width: 36px;
     min-height: 36px;
+  }
+
+  .eraser-size-section {
+    display: none;
+  }
+}
+
+/* Eraser Size Popup (renders outside toolbox-container) */
+.eraser-size-popup {
+  position: fixed;
+  top: 20px;
+  left: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background-color: #2A2A2A;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 150;
+}
+
+.eraser-size-popup label {
+  font-size: 10px;
+  color: var(--text-secondary, #999);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 600px) {
+  .eraser-size-popup {
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 60px;
+    flex-direction: row;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+
+  .eraser-size-popup .eraser-slider {
+    width: 80px;
   }
 }
 

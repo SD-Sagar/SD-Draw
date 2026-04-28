@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
 
 const CanvasEngine = () => {
-  const { elements, setElements, tool, strokeColor, strokeWidth, fillColor, undo, redo } = useCanvasStore();
+  const { elements, setElements, tool, strokeColor, strokeWidth, fillColor, eraserSize, undo, redo } = useCanvasStore();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -53,17 +53,15 @@ const CanvasEngine = () => {
     const preventTouch = (e) => {
       // Allow default on textarea/input for text editing
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
     };
 
     container.addEventListener('touchstart', preventTouch, { passive: false });
     container.addEventListener('touchmove', preventTouch, { passive: false });
-    container.addEventListener('touchend', preventTouch, { passive: false });
 
     return () => {
       container.removeEventListener('touchstart', preventTouch);
       container.removeEventListener('touchmove', preventTouch);
-      container.removeEventListener('touchend', preventTouch);
     };
   }, []);
 
@@ -191,8 +189,13 @@ const CanvasEngine = () => {
     // For mouse: skip middle/right click
     if (evt.button === 1 || evt.button === 2) return;
 
-    // For touch: if two fingers, start pinch — don't draw
-    if (evt.touches && evt.touches.length === 2) {
+    // For touch: if two fingers, cancel any drawing and start pinch
+    if (evt.touches && evt.touches.length >= 2) {
+      // Cancel any in-progress drawing from the first finger
+      if (isDrawing) {
+        setIsDrawing(false);
+        setCurrentElement(null);
+      }
       setLastPinchDist(getTouchDist(evt.touches));
       return;
     }
@@ -249,7 +252,7 @@ const CanvasEngine = () => {
       newElement.points = [pos.x, pos.y];
       if (tool === 'eraser') {
         newElement.stroke = '#1A1A1A'; // Erase by matching bg color
-        newElement.strokeWidth = strokeWidth * 5; // Erase thicker
+        newElement.strokeWidth = eraserSize;
       }
     } else if (tool === 'line' || tool === 'arrow') {
       newElement.points = [pos.x, pos.y, pos.x, pos.y];
@@ -272,14 +275,19 @@ const CanvasEngine = () => {
     const evt = e.evt;
 
     // Handle pinch-to-zoom with two fingers
-    if (evt.touches && evt.touches.length === 2) {
-      e.evt.preventDefault();
+    if (evt.touches && evt.touches.length >= 2) {
+      // Cancel any drawing that was started by the first finger
+      if (isDrawing) {
+        setIsDrawing(false);
+        setCurrentElement(null);
+      }
+
       const newDist = getTouchDist(evt.touches);
       if (lastPinchDist) {
         const stage = stageRef.current;
         const oldScale = stage.scaleX();
         const scaleChange = newDist / lastPinchDist;
-        const newScale = oldScale * scaleChange;
+        const newScale = Math.max(0.1, Math.min(10, oldScale * scaleChange));
 
         // Get center of two fingers for zoom-to-center
         const cx = (evt.touches[0].clientX + evt.touches[1].clientX) / 2;

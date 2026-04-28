@@ -3,13 +3,13 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   MousePointer2, Pencil, Eraser, Minus, ArrowRight, 
-  Square, Circle, Type, Undo2, Redo2, Download, Save, FolderOpen, PenTool, LogOut
+  Square, Circle, Type, Undo2, Redo2, Download, Save, FolderOpen, PenTool, LogOut, Plus, MinusIcon
 } from 'lucide-react';
 import useCanvasStore from '../store/useCanvasStore';
 import './Toolbox.css';
 
 const Toolbox = () => {
-  const { tool, setTool, undo, redo, strokeColor, setStrokeColor, elements, setElements, clearStore } = useCanvasStore();
+  const { tool, setTool, undo, redo, strokeColor, setStrokeColor, elements, setElements, clearStore, eraserSize, setEraserSize } = useCanvasStore();
   const navigate = useNavigate();
 
   const handleSave = async () => {
@@ -60,6 +60,7 @@ const Toolbox = () => {
   ];
 
   return (
+  <>
     <div className="toolbox-container">
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0', animation: 'pulse 2s infinite ease-in-out' }} title="SD-Draw">
         <PenTool size={28} color="#007BFF" />
@@ -115,6 +116,38 @@ const Toolbox = () => {
         </button>
       </div>
     </div>
+
+    {tool === 'eraser' && (
+      <div className="eraser-size-popup">
+        <label>Eraser Size</label>
+        <div className="eraser-size-controls">
+          <button
+            className="size-btn"
+            onClick={() => setEraserSize(Math.max(2, eraserSize - 2))}
+            title="Decrease"
+          >
+            <MinusIcon size={12} />
+          </button>
+          <span className="size-value">{eraserSize}</span>
+          <button
+            className="size-btn"
+            onClick={() => setEraserSize(Math.min(60, eraserSize + 2))}
+            title="Increase"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+        <input
+          type="range"
+          min="2"
+          max="60"
+          value={eraserSize}
+          onChange={(e) => setEraserSize(Number(e.target.value))}
+          className="eraser-slider"
+        />
+      </div>
+    )}
+  </>
   );
 };
 

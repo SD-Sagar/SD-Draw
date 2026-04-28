@@ -10,11 +10,13 @@ const useCanvasStore = create((set, get) => ({
   strokeColor: '#007BFF', // Sagar Blue
   strokeWidth: 2,
   fillColor: 'transparent',
+  eraserSize: 10,
   
   setTool: (tool) => set({ tool }),
   setStrokeColor: (strokeColor) => set({ strokeColor }),
   setStrokeWidth: (strokeWidth) => set({ strokeWidth }),
   setFillColor: (fillColor) => set({ fillColor }),
+  setEraserSize: (eraserSize) => set({ eraserSize }),
   
   setElements: (elements, addToHistory = true) => {
     set((state) => {
