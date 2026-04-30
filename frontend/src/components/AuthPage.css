@@ -147,6 +147,50 @@
   text-align: center;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.5rem 0;
+  color: #555;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #333;
+}
+
+.auth-divider span {
+  padding: 0 1rem;
+}
+
+.guest-btn {
+  background-color: transparent;
+  color: #D0D0D0;
+  border: 1px solid #444;
+  padding: 0.8rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  width: 100%;
+}
+
+.guest-btn:hover {
+  border-color: #007BFF;
+  color: #fff;
+  background-color: rgba(0, 123, 255, 0.05);
+}
+
+.guest-btn:active {
+  transform: scale(0.98);
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);

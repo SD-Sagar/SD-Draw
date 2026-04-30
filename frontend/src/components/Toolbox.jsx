@@ -1,65 +1,37 @@
 import React from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
 import { 
-  MousePointer2, Pencil, Eraser, Minus, ArrowRight, 
-  Square, Circle, Type, Undo2, Redo2, Download, Save, FolderOpen, PenTool, LogOut, Plus, MinusIcon,
-  Triangle, Star, PencilLine
+  MousePointer2, Pencil, Eraser, Square, Circle, Triangle, Star, 
+  Type, Undo2, Redo2, Download, Save, FolderOpen, LogOut,
+  Minus, ArrowRight, Plus, Minus as MinusIcon, PencilLine,
+  Diamond, Pentagon, Hexagon
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import useCanvasStore from '../store/useCanvasStore';
 import Logo from './Logo';
 import './Toolbox.css';
 
 const Toolbox = () => {
   const { 
-    tool, setTool, undo, redo, strokeColor, setStrokeColor, 
-    elements, setElements, clearStore, eraserSize, setEraserSize,
-    precisionEraserSize, setPrecisionEraserSize,
-    strokeWidth, setStrokeWidth, fontSize, setFontSize,
-    fontFamily, setFontFamily, canvasBgColor, setCanvasBgColor,
-    selectedId
+    tool, setTool, strokeColor, setStrokeColor, 
+    strokeWidth, setStrokeWidth, fillColor, setFillColor,
+    eraserSize, setEraserSize, precisionEraserSize, setPrecisionEraserSize,
+    canvasBgColor, setCanvasBgColor,
+    fontSize, setFontSize, fontFamily, setFontFamily,
+    elements, setElements, undo, redo, clearStore
   } = useCanvasStore();
+
   const navigate = useNavigate();
 
-  // Helper to update selected element properties
-  const updateSelectedElement = (updates) => {
-    if (selectedId) {
-      const updatedElements = elements.map(el => 
-        el.id === selectedId ? { ...el, ...updates } : el
-      );
-      setElements(updatedElements, true);
-    }
-  };
-
-  const handleStrokeWidthChange = (val) => {
-    setStrokeWidth(val);
-    updateSelectedElement({ strokeWidth: val });
-  };
-
-  const handleFontSizeChange = (val) => {
-    setFontSize(val);
-    updateSelectedElement({ fontSize: val });
-  };
-
-  const handleFontFamilyChange = (val) => {
-    setFontFamily(val);
-    updateSelectedElement({ fontFamily: val });
-  };
-
-  const handleStrokeColorChange = (val) => {
-    setStrokeColor(val);
-    const selectedEl = elements.find(el => el.id === selectedId);
-    if (selectedEl && selectedEl.type === 'text') {
-      updateSelectedElement({ stroke: val, fill: val });
-    } else {
-      updateSelectedElement({ stroke: val });
-    }
-  };
+  const handleStrokeWidthChange = (val) => setStrokeWidth(val);
+  const handleStrokeColorChange = (val) => setStrokeColor(val);
 
   const handleSave = async () => {
     try {
       const token = localStorage.getItem('sd_token');
-      await axios.put(`/api/canvas`, { elements }, {
+      if (!token) return;
+
+      await axios.put('/api/canvas', { elements }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       alert('Canvas saved successfully!');
@@ -71,11 +43,16 @@ const Toolbox = () => {
   const handleLoad = async () => {
     try {
       const token = localStorage.getItem('sd_token');
-      const res = await axios.get(`/api/canvas`, {
+      if (!token) return;
+
+      const res = await axios.get('/api/canvas', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setElements(res.data, false);
-      alert('Canvas loaded successfully!');
+      if (res.data) {
+        // Backend returns elements array directly
+        setElements(res.data, false);
+        alert('Canvas loaded!');
+      }
     } catch (e) {
       if (e.response && e.response.status === 404) {
         alert('No saved canvas found.');
@@ -88,6 +65,7 @@ const Toolbox = () => {
   const handleLogout = () => {
     localStorage.removeItem('sd_token');
     localStorage.removeItem('sd_user');
+    localStorage.removeItem('sd_guest');
     clearStore();
     navigate('/');
   };
@@ -102,6 +80,9 @@ const Toolbox = () => {
     { id: 'rect', icon: Square, label: 'Rectangle' },
     { id: 'circle', icon: Circle, label: 'Circle' },
     { id: 'triangle', icon: Triangle, label: 'Triangle' },
+    { id: 'diamond', icon: Diamond, label: 'Diamond' },
+    { id: 'pentagon', icon: Pentagon, label: 'Pentagon' },
+    { id: 'hexagon', icon: Hexagon, label: 'Hexagon' },
     { id: 'star', icon: Star, label: 'Star' },
     { id: 'text', icon: Type, label: 'Text' },
   ];
@@ -114,16 +95,19 @@ const Toolbox = () => {
     { name: 'Impact', value: 'Impact' },
   ];
 
+  const isGuest = localStorage.getItem('sd_guest') === 'true';
+
   // Determine which settings to show in the floating popup
-  const showStrokeSettings = ['pencil', 'line', 'arrow', 'rect', 'circle', 'triangle', 'star'].includes(tool);
+  const showStrokeSettings = ['pencil', 'line', 'arrow', 'rect', 'circle', 'triangle', 'diamond', 'pentagon', 'hexagon', 'star'].includes(tool);
   const showTextSettings = tool === 'text';
   const showPrecisionSettings = tool === 'precision-eraser';
 
   return (
   <>
     <div className="toolbox-container">
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0', animation: 'pulse 2s infinite ease-in-out' }} title="SD-Draw">
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0', animation: 'pulse 2s infinite ease-in-out', position: 'relative' }} title="SD-Draw">
         <Logo size={40} />
+        {isGuest && <div style={{ position: 'absolute', bottom: -5, right: 0, fontSize: '8px', background: '#A855F7', color: 'white', padding: '1px 4px', borderRadius: '4px', fontWeight: 'bold' }}>GUEST</div>}
       </div>
       <div className="toolbox-divider"></div>
 
@@ -173,10 +157,22 @@ const Toolbox = () => {
         <button className="action-btn" onClick={redo} title="Redo">
           <Redo2 size={18} />
         </button>
-        <button className="action-btn" title="Save" onClick={handleSave}>
+        <button 
+          className="action-btn" 
+          title={isGuest ? "Register to Save" : "Save"} 
+          onClick={handleSave}
+          disabled={isGuest}
+          style={{ opacity: isGuest ? 0.3 : 1, cursor: isGuest ? 'not-allowed' : 'pointer' }}
+        >
           <Save size={18} />
         </button>
-        <button className="action-btn" title="Load" onClick={handleLoad}>
+        <button 
+          className="action-btn" 
+          title={isGuest ? "Register to Load" : "Load"} 
+          onClick={handleLoad}
+          disabled={isGuest}
+          style={{ opacity: isGuest ? 0.3 : 1, cursor: isGuest ? 'not-allowed' : 'pointer' }}
+        >
           <FolderOpen size={18} />
         </button>
         <button className="action-btn" title="Export to PNG" onClick={() => window.dispatchEvent(new CustomEvent('export-canvas'))} style={{ gridColumn: 'span 2' }}>
@@ -218,15 +214,21 @@ const Toolbox = () => {
             <div className="settings-group">
               <label>Font Size: {fontSize}</label>
               <div className="settings-controls">
-                <button className="mini-btn" onClick={() => handleFontSizeChange(Math.max(8, fontSize - 2))}><MinusIcon size={12} /></button>
-                <input type="range" min="8" max="120" value={fontSize} onChange={(e) => handleFontSizeChange(Number(e.target.value))} className="settings-slider" />
-                <button className="mini-btn" onClick={() => handleFontSizeChange(Math.min(120, fontSize + 2))}><Plus size={12} /></button>
+                <button className="mini-btn" onClick={() => setFontSize(Math.max(8, fontSize - 2))}><MinusIcon size={12} /></button>
+                <input type="range" min="8" max="100" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} className="settings-slider" />
+                <button className="mini-btn" onClick={() => setFontSize(Math.min(100, fontSize + 2))}><Plus size={12} /></button>
               </div>
             </div>
             <div className="settings-group">
               <label>Font Family</label>
-              <select value={fontFamily} onChange={(e) => handleFontFamilyChange(e.target.value)} className="font-select">
-                {fonts.map(f => <option key={f.value} value={f.value}>{f.name}</option>)}
+              <select 
+                value={fontFamily} 
+                onChange={(e) => setFontFamily(e.target.value)}
+                className="settings-select"
+              >
+                {fonts.map(f => (
+                  <option key={f.value} value={f.value}>{f.name}</option>
+                ))}
               </select>
             </div>
           </>
@@ -237,6 +239,4 @@ const Toolbox = () => {
   );
 };
 
-
 export default Toolbox;
-

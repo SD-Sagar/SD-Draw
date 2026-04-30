@@ -71,6 +71,23 @@ const AuthPage = () => {
             {isLogin ? 'Register here' : 'Login here'}
           </span>
         </div>
+
+        <div className="auth-divider">
+          <span>OR</span>
+        </div>
+
+        <button 
+          type="button" 
+          className="guest-btn"
+          onClick={() => {
+            localStorage.removeItem('sd_token');
+            localStorage.removeItem('sd_user');
+            localStorage.setItem('sd_guest', 'true');
+            navigate('/draw');
+          }}
+        >
+          Try Guest Mode
+        </button>
       </div>
     </div>
   );

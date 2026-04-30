@@ -463,10 +463,17 @@ const CanvasEngine = () => {
         } else if (el.type === 'circle') {
           const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
           if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
-        } else if (el.type === 'triangle') {
+        } else if (['triangle', 'diamond', 'pentagon', 'hexagon'].includes(el.type)) {
           const r = el.radius || 0;
-          const pts = [{x:r*Math.sin(0), y:-r*Math.cos(0)}, {x:r*Math.sin(2*Math.PI/3), y:-r*Math.cos(2*Math.PI/3)}, {x:r*Math.sin(4*Math.PI/3), y:-r*Math.cos(4*Math.PI/3)}];
-          if (dts(localPos, pts[0], pts[1]) < threshold || dts(localPos, pts[1], pts[2]) < threshold || dts(localPos, pts[2], pts[0]) < threshold) isHit = true;
+          const sides = el.type === 'triangle' ? 3 : (el.type === 'diamond' ? 4 : (el.type === 'pentagon' ? 5 : 6));
+          const pts = [];
+          for (let n = 0; n < sides; n++) {
+            const angle = (n * 2 * Math.PI) / sides;
+            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
+          }
+          for (let n = 0; n < pts.length; n++) {
+            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
+          }
         } else if (el.type === 'star') {
           const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
           const pts = [];
@@ -518,10 +525,9 @@ const CanvasEngine = () => {
       newElement.x = pos.x;
       newElement.y = pos.y;
       newElement.radius = 0;
-    } else if (tool === 'triangle') {
+    } else if (tool === 'triangle' || tool === 'diamond' || tool === 'pentagon' || tool === 'hexagon') {
       newElement.x = pos.x;
       newElement.y = pos.y;
-      newElement.sides = 3;
       newElement.radius = 0;
     } else if (tool === 'star') {
       newElement.x = pos.x;
@@ -632,10 +638,17 @@ const CanvasEngine = () => {
         } else if (el.type === 'circle') {
           const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
           if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
-        } else if (el.type === 'triangle') {
+        } else if (['triangle', 'diamond', 'pentagon', 'hexagon'].includes(el.type)) {
           const r = el.radius || 0;
-          const pts = [{x:r*Math.sin(0), y:-r*Math.cos(0)}, {x:r*Math.sin(2*Math.PI/3), y:-r*Math.cos(2*Math.PI/3)}, {x:r*Math.sin(4*Math.PI/3), y:-r*Math.cos(4*Math.PI/3)}];
-          if (dts(localPos, pts[0], pts[1]) < threshold || dts(localPos, pts[1], pts[2]) < threshold || dts(localPos, pts[2], pts[0]) < threshold) isHit = true;
+          const sides = el.type === 'triangle' ? 3 : (el.type === 'diamond' ? 4 : (el.type === 'pentagon' ? 5 : 6));
+          const pts = [];
+          for (let n = 0; n < sides; n++) {
+            const angle = (n * 2 * Math.PI) / sides;
+            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
+          }
+          for (let n = 0; n < pts.length; n++) {
+            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
+          }
         } else if (el.type === 'star') {
           const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
           const pts = [];
@@ -674,7 +687,7 @@ const CanvasEngine = () => {
     } else if (tool === 'rect') {
       updatedElement.width = pos.x - updatedElement.x;
       updatedElement.height = pos.y - updatedElement.y;
-    } else if (tool === 'circle' || tool === 'triangle') {
+    } else if (tool === 'circle' || tool === 'triangle' || tool === 'diamond' || tool === 'pentagon' || tool === 'hexagon') {
       const dx = pos.x - updatedElement.x;
       const dy = pos.y - updatedElement.y;
       updatedElement.radius = Math.sqrt(dx * dx + dy * dy);
@@ -920,6 +933,12 @@ const CanvasEngine = () => {
         return <Circle {...commonProps} x={el.x} y={el.y} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'triangle':
         return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={3} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+      case 'diamond':
+        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={4} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+      case 'pentagon':
+        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={5} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+      case 'hexagon':
+        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={6} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'star':
         return <Star {...commonProps} x={el.x} y={el.y} numPoints={5} innerRadius={el.innerRadius} outerRadius={el.outerRadius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'text':
