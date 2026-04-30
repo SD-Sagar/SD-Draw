@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   MousePointer2, Pencil, Eraser, Minus, ArrowRight, 
   Square, Circle, Type, Undo2, Redo2, Download, Save, FolderOpen, PenTool, LogOut, Plus, MinusIcon,
-  Triangle, Star
+  Triangle, Star, PencilLine
 } from 'lucide-react';
 import useCanvasStore from '../store/useCanvasStore';
 import Logo from './Logo';
@@ -14,6 +14,7 @@ const Toolbox = () => {
   const { 
     tool, setTool, undo, redo, strokeColor, setStrokeColor, 
     elements, setElements, clearStore, eraserSize, setEraserSize,
+    precisionEraserSize, setPrecisionEraserSize,
     strokeWidth, setStrokeWidth, fontSize, setFontSize,
     fontFamily, setFontFamily, canvasBgColor, setCanvasBgColor,
     selectedId
@@ -94,7 +95,8 @@ const Toolbox = () => {
   const tools = [
     { id: 'select', icon: MousePointer2, label: 'Select' },
     { id: 'pencil', icon: Pencil, label: 'Pencil' },
-    { id: 'eraser', icon: Eraser, label: 'Eraser' },
+    { id: 'eraser', icon: Eraser, label: 'Object Eraser' },
+    { id: 'precision-eraser', icon: PencilLine, label: 'Precision Eraser' },
     { id: 'line', icon: Minus, label: 'Line' },
     { id: 'arrow', icon: ArrowRight, label: 'Arrow' },
     { id: 'rect', icon: Square, label: 'Rectangle' },
@@ -115,6 +117,7 @@ const Toolbox = () => {
   // Determine which settings to show in the floating popup
   const showStrokeSettings = ['pencil', 'line', 'arrow', 'rect', 'circle', 'triangle', 'star'].includes(tool);
   const showTextSettings = tool === 'text';
+  const showPrecisionSettings = tool === 'precision-eraser';
 
   return (
   <>
@@ -186,7 +189,7 @@ const Toolbox = () => {
     </div>
 
     {/* Floating Settings Popup */}
-    {(showStrokeSettings || showTextSettings) && (
+    {(showStrokeSettings || showTextSettings || showPrecisionSettings) && (
       <div className="tool-settings-popup">
         {showStrokeSettings && (
           <div className="settings-group">
@@ -195,6 +198,17 @@ const Toolbox = () => {
               <button className="mini-btn" onClick={() => handleStrokeWidthChange(Math.max(1, strokeWidth - 1))}><MinusIcon size={12} /></button>
               <input type="range" min="1" max="50" value={strokeWidth} onChange={(e) => handleStrokeWidthChange(Number(e.target.value))} className="settings-slider" />
               <button className="mini-btn" onClick={() => handleStrokeWidthChange(Math.min(50, strokeWidth + 1))}><Plus size={12} /></button>
+            </div>
+          </div>
+        )}
+
+        {showPrecisionSettings && (
+          <div className="settings-group">
+            <label>Precision Eraser Size: {precisionEraserSize}</label>
+            <div className="settings-controls">
+              <button className="mini-btn" onClick={() => setPrecisionEraserSize(Math.max(2, precisionEraserSize - 2))}><MinusIcon size={12} /></button>
+              <input type="range" min="2" max="100" value={precisionEraserSize} onChange={(e) => setPrecisionEraserSize(Number(e.target.value))} className="settings-slider" />
+              <button className="mini-btn" onClick={() => setPrecisionEraserSize(Math.min(100, precisionEraserSize + 2))}><Plus size={12} /></button>
             </div>
           </div>
         )}

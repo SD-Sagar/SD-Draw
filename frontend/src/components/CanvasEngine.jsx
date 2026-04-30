@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star } from 'react-konva';
+import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star, Group } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
 
@@ -7,7 +7,8 @@ const CanvasEngine = () => {
   const { 
     elements, setElements, tool, strokeColor, setStrokeColor, 
     strokeWidth, setStrokeWidth, fillColor, setFillColor, 
-    eraserSize, setEraserSize, canvasBgColor, setCanvasBgColor, 
+    eraserSize, setEraserSize, precisionEraserSize, setPrecisionEraserSize,
+    canvasBgColor, setCanvasBgColor, 
     fontSize, setFontSize, fontFamily, setFontFamily, 
     undo, redo 
   } = useCanvasStore();
@@ -206,6 +207,138 @@ const CanvasEngine = () => {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
+  const performPrecisionErase = (pos, lastPos) => {
+    const radius = (precisionEraserSize || 10) / 2;
+    const radiusSq = radius * radius;
+    let elementsChanged = false;
+    const nextElements = [];
+
+    // Helper: Distance from point p to line segment v-w
+    const distToSegment = (p, v, w) => {
+      const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+      if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
+      let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
+    };
+
+    // Advanced Clipping Helper: Finds intersections of segment P1P2 with circle C,R
+    const getCircleSegmentIntersections = (p1, p2, c, r) => {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const fx = p1.x - c.x;
+      const fy = p1.y - c.y;
+
+      const a = dx * dx + dy * dy;
+      const b = 2 * (fx * dx + fy * dy);
+      const c_val = fx * fx + fy * fy - r * r;
+
+      let discriminant = b * b - 4 * a * c_val;
+      if (discriminant < 0) return [];
+      
+      discriminant = Math.sqrt(discriminant);
+      const t1 = (-b - discriminant) / (2 * a);
+      const t2 = (-b + discriminant) / (2 * a);
+
+      const points = [];
+      if (t1 >= 0 && t1 <= 1) points.push({ x: p1.x + t1 * dx, y: p1.y + t1 * dy });
+      if (t2 >= 0 && t2 <= 1) points.push({ x: p1.x + t2 * dx, y: p1.y + t2 * dy });
+      return points;
+    };
+    for (const el of elements) {
+      if (el.type === 'pencil' && el.points) {
+        const ex = el.x || 0;
+        const ey = el.y || 0;
+        const localPos = { x: pos.x - ex, y: pos.y - ey };
+        const localLastPos = lastPos ? { x: lastPos.x - ex, y: lastPos.y - ey } : null;
+
+        // Bounding box check for performance - account for movement path
+        const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+        const elStrokeWidth = el.strokeWidth || 2;
+        const margin = radius + elStrokeWidth + 20;
+        
+        const minEraserX = localLastPos ? Math.min(localPos.x, localLastPos.x) : localPos.x;
+        const maxEraserX = localLastPos ? Math.max(localPos.x, localLastPos.x) : localPos.x;
+        const minEraserY = localLastPos ? Math.min(localPos.y, localLastPos.y) : localPos.y;
+        const maxEraserY = localLastPos ? Math.max(localPos.y, localLastPos.y) : localPos.y;
+
+        if (maxEraserX < bbox.minX - margin || minEraserX > bbox.maxX + margin || 
+            maxEraserY < bbox.minY - margin || minEraserY > bbox.maxY + margin) {
+          nextElements.push(el);
+          continue;
+        }
+
+        const newSegments = [];
+        let currentSegment = [];
+
+        for (let i = 0; i < el.points.length - 2; i += 2) {
+          const p1 = { x: el.points[i], y: el.points[i + 1] };
+          const p2 = { x: el.points[i + 2], y: el.points[i + 3] };
+
+          // Calculate distance from eraser center to the pencil segment
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const l2 = dx * dx + dy * dy;
+          let t = l2 === 0 ? 0 : ((localPos.x - p1.x) * dx + (localPos.y - p1.y) * dy) / l2;
+          t = Math.max(0, Math.min(1, t));
+          const closestPoint = { x: p1.x + t * dx, y: p1.y + t * dy };
+          const dist = Math.sqrt(Math.pow(localPos.x - closestPoint.x, 2) + Math.pow(localPos.y - closestPoint.y, 2));
+
+          // Trigger hit if eraser touches the VISUAL body (path + strokeWidth/2)
+          // Also check swipe from lastPos
+          let isHit = dist < (radius + elStrokeWidth / 2);
+          if (!isHit && localLastPos) {
+            // Check if p1 or p2 was passed by the eraser's movement segment
+            isHit = distToSegment(p1, localLastPos, localPos) < (radius + elStrokeWidth / 2);
+          }
+
+          if (isHit) {
+            // FULL BREAK: Split the line at this segment
+            // To create a visible gap, we discard this segment and potentially trim adjacent ones
+            if (currentSegment.length >= 4) {
+              // Finish the current line before the break
+              // Optional: trim the end of currentSegment to leave a gap
+              newSegments.push(currentSegment);
+            }
+            currentSegment = []; // Start fresh after the break
+            elementsChanged = true;
+          } else {
+            if (currentSegment.length === 0) currentSegment.push(p1.x, p1.y);
+            currentSegment.push(p2.x, p2.y);
+          }
+        }
+        
+        if (currentSegment.length >= 4) newSegments.push(currentSegment);
+
+        if (newSegments.length === 0) {
+          elementsChanged = true;
+        } else if (newSegments.length === 1 && newSegments[0].length === el.points.length && !elementsChanged) {
+          nextElements.push(el);
+        } else {
+          newSegments.forEach((seg, idx) => {
+            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+            for (let k = 0; k < seg.length; k += 2) {
+              if (seg[k] < sMinX) sMinX = seg[k]; if (seg[k] > sMaxX) sMaxX = seg[k];
+              if (seg[k+1] < sMinY) sMinY = seg[k+1]; if (seg[k+1] > sMaxY) sMaxY = seg[k+1];
+            }
+            nextElements.push({
+              ...el,
+              id: idx === 0 ? el.id : uuidv4(),
+              points: seg,
+              bbox: { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
+            });
+          });
+        }
+      } else {
+        nextElements.push(el);
+      }
+    }
+
+    if (elementsChanged) {
+      setElements(nextElements, false);
+    }
+  };
+
   // Unified pointer-down handler (works for both mouse and touch)
   const handlePointerDown = (e) => {
     if (textInput) {
@@ -286,17 +419,20 @@ const CanvasEngine = () => {
       return;
     }
 
-    // Object-based Eraser (Miro-style)
-    // Only run if NOT moving elements with Ctrl
-    if (tool === 'eraser' && !ctrlPressed) {
+    if (tool === 'precision-eraser' && !ctrlPressed) {
       setEraserPath([pos.x, pos.y]);
-      setElementsToDelete(new Set());
-      
-      const threshold = 8;
-      let hitId = null;
+      setIsDrawing(true);
+      performPrecisionErase(pos, null);
+      return;
+    }
 
-      // Distance helper for segment
-      const distToSegment = (p, v, w) => {
+    if (tool === 'eraser' && !ctrlPressed) {
+      setIsDrawing(true);
+      setEraserPath([pos.x, pos.y]);
+      setElementsToDelete(new Set()); // Start fresh
+
+      const baseThreshold = 3;
+      const dts = (p, v, w) => {
         const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
         if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
         let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
@@ -306,62 +442,51 @@ const CanvasEngine = () => {
 
       for (let i = elements.length - 1; i >= 0; i--) {
         const el = elements[i];
+        const ex = el.x || 0;
+        const ey = el.y || 0;
+        const localPos = { x: pos.x - ex, y: pos.y - ey };
         let isHit = false;
+        
+        const sw = el.strokeWidth || 2;
+        const threshold = baseThreshold + sw / 2;
 
         if (el.type === 'pencil' || el.type === 'line' || el.type === 'arrow') {
           if (el.points) {
             for (let j = 0; j < el.points.length - 2; j += 2) {
-              const v = { x: el.points[j], y: el.points[j+1] };
-              const w = { x: el.points[j+2], y: el.points[j+3] };
-              if (distToSegment(pos, v, w) < threshold) { isHit = true; break; }
+              if (dts(localPos, {x:el.points[j], y:el.points[j+1]}, {x:el.points[j+2], y:el.points[j+3]}) < threshold) { isHit = true; break; }
             }
           }
         } else if (el.type === 'rect') {
-          const v1 = { x: el.x, y: el.y };
-          const v2 = { x: el.x + el.width, y: el.y };
-          const v3 = { x: el.x + el.width, y: el.y + el.height };
-          const v4 = { x: el.x, y: el.y + el.height };
-          if (distToSegment(pos, v1, v2) < threshold || distToSegment(pos, v2, v3) < threshold || 
-              distToSegment(pos, v3, v4) < threshold || distToSegment(pos, v4, v1) < threshold) isHit = true;
+          const w = el.width || 0, h = el.height || 0;
+          if (dts(localPos, {x:0, y:0}, {x:w, y:0}) < threshold || dts(localPos, {x:w, y:0}, {x:w, y:h}) < threshold ||
+              dts(localPos, {x:w, y:h}, {x:0, y:h}) < threshold || dts(localPos, {x:0, y:h}, {x:0, y:0}) < threshold) isHit = true;
         } else if (el.type === 'circle') {
-          const dist = Math.sqrt(Math.pow(pos.x - el.x, 2) + Math.pow(pos.y - el.y, 2));
-          if (Math.abs(dist - el.radius) < threshold) isHit = true;
+          const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
+          if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
         } else if (el.type === 'triangle') {
-          const r = el.radius;
-          const pts = [
-            { x: el.x + r * Math.sin(0), y: el.y - r * Math.cos(0) },
-            { x: el.x + r * Math.sin(2*Math.PI/3), y: el.y - r * Math.cos(2*Math.PI/3) },
-            { x: el.x + r * Math.sin(4*Math.PI/3), y: el.y - r * Math.cos(4*Math.PI/3) }
-          ];
-          if (distToSegment(pos, pts[0], pts[1]) < threshold || 
-              distToSegment(pos, pts[1], pts[2]) < threshold || 
-              distToSegment(pos, pts[2], pts[0]) < threshold) isHit = true;
+          const r = el.radius || 0;
+          const pts = [{x:r*Math.sin(0), y:-r*Math.cos(0)}, {x:r*Math.sin(2*Math.PI/3), y:-r*Math.cos(2*Math.PI/3)}, {x:r*Math.sin(4*Math.PI/3), y:-r*Math.cos(4*Math.PI/3)}];
+          if (dts(localPos, pts[0], pts[1]) < threshold || dts(localPos, pts[1], pts[2]) < threshold || dts(localPos, pts[2], pts[0]) < threshold) isHit = true;
         } else if (el.type === 'star') {
-          const r1 = el.outerRadius;
-          const r2 = el.innerRadius;
+          const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
           const pts = [];
           for (let n = 0; n < 10; n++) {
             const r = n % 2 === 0 ? r1 : r2;
             const angle = (n * Math.PI) / 5;
-            pts.push({ x: el.x + r * Math.sin(angle), y: el.y - r * Math.cos(angle) });
+            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
           }
           for (let n = 0; n < pts.length; n++) {
-            if (distToSegment(pos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
+            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
           }
         } else if (el.type === 'text') {
-          if (pos.x >= el.x && pos.x <= el.x + (el.width || 100) && pos.y >= el.y && pos.y <= el.y + (el.fontSize || 20)) isHit = true;
+          if (localPos.x >= -baseThreshold && localPos.x <= (el.width || 100) + baseThreshold && localPos.y >= -baseThreshold && localPos.y <= (el.fontSize || 20) + baseThreshold) isHit = true;
         }
 
         if (isHit) {
-          hitId = el.id;
+          setElementsToDelete(new Set([el.id]));
           break;
         }
       }
-
-      if (hitId) {
-        setElementsToDelete(new Set([hitId]));
-      }
-      setIsDrawing(true);
       return;
     }
 
@@ -452,83 +577,88 @@ const CanvasEngine = () => {
     const pos = getRelativePointerPosition(stage);
     if (!pos) return;
 
-    // Helper: Distance from point p to line segment v-w
-    const distToSegment = (p, v, w) => {
-      const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-      if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
-      let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-      t = Math.max(0, Math.min(1, t));
-      return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
-    };
+
+
+    if (tool === 'precision-eraser' || tool === 'eraser') {
+      if (tool === 'eraser' && isDrawing) {
+        setEraserPath(prev => (prev && prev.length >= 2 ? [...prev, pos.x, pos.y] : [pos.x, pos.y]));
+      } else {
+        setEraserPath([pos.x, pos.y]);
+      }
+    }
+
+    if (tool === 'precision-eraser' && isDrawing && !ctrlPressed) {
+      const lastPos = eraserPath && eraserPath.length >= 2 ? { x: eraserPath[0], y: eraserPath[1] } : pos;
+      performPrecisionErase(pos, lastPos);
+      return;
+    }
 
     if (tool === 'eraser' && isDrawing && !ctrlPressed) {
-      setEraserPath(prev => [...prev, pos.x, pos.y]);
+      const baseThreshold = 3; 
       
-      let hitId = null;
-      const threshold = 8; // Reduced for more precision
+      const dts = (p, v, w) => {
+        const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+        if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
+      };
 
-      // Iterate backwards (top to bottom) to find the first hit
       for (let i = elements.length - 1; i >= 0; i--) {
         const el = elements[i];
+        if (elementsToDelete.has(el.id)) continue;
+
         let isHit = false;
+        const ex = el.x || 0;
+        const ey = el.y || 0;
+        const localPos = { x: pos.x - ex, y: pos.y - ey };
+        
+        // Account for visual thickness of the stroke
+        const sw = el.strokeWidth || 2;
+        const threshold = baseThreshold + sw / 2;
 
         if (el.type === 'pencil' || el.type === 'line' || el.type === 'arrow') {
           if (el.points) {
             for (let j = 0; j < el.points.length - 2; j += 2) {
-              const v = { x: el.points[j], y: el.points[j+1] };
-              const w = { x: el.points[j+2], y: el.points[j+3] };
-              if (distToSegment(pos, v, w) < threshold) { isHit = true; break; }
+              const p1 = { x: el.points[j], y: el.points[j+1] };
+              const p2 = { x: el.points[j+2], y: el.points[j+3] };
+              if (dts(localPos, p1, p2) < threshold) { isHit = true; break; }
             }
           }
         } else if (el.type === 'rect') {
-          const v1 = { x: el.x, y: el.y };
-          const v2 = { x: el.x + el.width, y: el.y };
-          const v3 = { x: el.x + el.width, y: el.y + el.height };
-          const v4 = { x: el.x, y: el.y + el.height };
-          if (distToSegment(pos, v1, v2) < threshold || distToSegment(pos, v2, v3) < threshold || 
-              distToSegment(pos, v3, v4) < threshold || distToSegment(pos, v4, v1) < threshold) isHit = true;
+          const w = el.width || 0, h = el.height || 0;
+          if (dts(localPos, {x:0, y:0}, {x:w, y:0}) < threshold || dts(localPos, {x:w, y:0}, {x:w, y:h}) < threshold ||
+              dts(localPos, {x:w, y:h}, {x:0, y:h}) < threshold || dts(localPos, {x:0, y:h}, {x:0, y:0}) < threshold) isHit = true;
         } else if (el.type === 'circle') {
-          const dist = Math.sqrt(Math.pow(pos.x - el.x, 2) + Math.pow(pos.y - el.y, 2));
-          if (Math.abs(dist - el.radius) < threshold) isHit = true;
+          const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
+          if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
         } else if (el.type === 'triangle') {
-          const r = el.radius;
-          const points = [
-            { x: el.x + r * Math.sin(0), y: el.y - r * Math.cos(0) },
-            { x: el.x + r * Math.sin(2*Math.PI/3), y: el.y - r * Math.cos(2*Math.PI/3) },
-            { x: el.x + r * Math.sin(4*Math.PI/3), y: el.y - r * Math.cos(4*Math.PI/3) }
-          ];
-          if (distToSegment(pos, points[0], points[1]) < threshold || 
-              distToSegment(pos, points[1], points[2]) < threshold || 
-              distToSegment(pos, points[2], points[0]) < threshold) isHit = true;
+          const r = el.radius || 0;
+          const pts = [{x:r*Math.sin(0), y:-r*Math.cos(0)}, {x:r*Math.sin(2*Math.PI/3), y:-r*Math.cos(2*Math.PI/3)}, {x:r*Math.sin(4*Math.PI/3), y:-r*Math.cos(4*Math.PI/3)}];
+          if (dts(localPos, pts[0], pts[1]) < threshold || dts(localPos, pts[1], pts[2]) < threshold || dts(localPos, pts[2], pts[0]) < threshold) isHit = true;
         } else if (el.type === 'star') {
-          const r1 = el.outerRadius;
-          const r2 = el.innerRadius;
-          const num = 5;
-          const points = [];
-          for (let n = 0; n < num * 2; n++) {
+          const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
+          const pts = [];
+          for (let n = 0; n < 10; n++) {
             const r = n % 2 === 0 ? r1 : r2;
-            const angle = (n * Math.PI) / num;
-            points.push({ x: el.x + r * Math.sin(angle), y: el.y - r * Math.cos(angle) });
+            const angle = (n * Math.PI) / 5;
+            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
           }
-          for (let n = 0; n < points.length; n++) {
-            if (distToSegment(pos, points[n], points[(n+1) % points.length]) < threshold) { isHit = true; break; }
+          for (let n = 0; n < pts.length; n++) {
+            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
           }
         } else if (el.type === 'text') {
-          if (pos.x >= el.x && pos.x <= el.x + (el.width || 100) && pos.y >= el.y && pos.y <= el.y + (el.fontSize || 20)) isHit = true;
+          if (localPos.x >= -baseThreshold && localPos.x <= (el.width || 100) + baseThreshold && localPos.y >= -baseThreshold && localPos.y <= (el.fontSize || 20) + baseThreshold) isHit = true;
         }
 
         if (isHit) {
-          hitId = el.id;
+          setElementsToDelete(prev => {
+            const next = new Set(prev);
+            next.add(el.id);
+            return next;
+          });
           break;
         }
-      }
-
-      if (hitId) {
-        setElementsToDelete(prev => {
-          const next = new Set(prev);
-          next.add(hitId);
-          return next;
-        });
       }
       return;
     }
@@ -572,11 +702,29 @@ const CanvasEngine = () => {
       setElementsToDelete(new Set());
     }
 
+    if (tool === 'precision-eraser' && isDrawing) {
+      setEraserPath(null);
+      // We don't need elementsToDelete for precision eraser as it's real-time,
+      // but we should commit the final state to history here.
+      setElements([...elements], true); 
+    }
+
     if (!isDrawing) return;
     setIsDrawing(false);
 
     if (currentElement) {
-      setElements([...elements, currentElement], true);
+      const finalElement = { ...currentElement };
+      if (finalElement.type === 'pencil' && finalElement.points) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (let i = 0; i < finalElement.points.length; i += 2) {
+          const x = finalElement.points[i];
+          const y = finalElement.points[i + 1];
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+        finalElement.bbox = { minX, minY, maxX, maxY };
+      }
+      setElements([...elements, finalElement], true);
       setCurrentElement(null);
     }
   };
@@ -829,7 +977,8 @@ const CanvasEngine = () => {
           {elements.map(renderElement)}
           {currentElement && renderElement(currentElement)}
           
-          {eraserPath && (
+          {/* Visual Eraser Path (Object Eraser) - only when actually drawing/erasing multiple */}
+          {eraserPath && tool === 'eraser' && isDrawing && (
             <Line
               points={eraserPath}
               stroke="#ff4d4d"
@@ -840,6 +989,29 @@ const CanvasEngine = () => {
               opacity={0.6}
               listening={false}
             />
+          )}
+
+          {/* Precision Eraser Head / Regular Eraser Head */}
+          {(tool === 'precision-eraser' || tool === 'eraser') && eraserPath && eraserPath.length >= 2 && (
+            <Group 
+              x={eraserPath[eraserPath.length - 2]} 
+              y={eraserPath[eraserPath.length - 1]} 
+              listening={false}
+            >
+              <Circle
+                radius={tool === 'precision-eraser' ? (precisionEraserSize || 10) / 2 : 3}
+                fill="white"
+                stroke="#666"
+                strokeWidth={1}
+                opacity={0.5}
+              />
+              {tool === 'precision-eraser' && (
+                <Group opacity={0.8}>
+                  <Line points={[-4, 0, 4, 0]} stroke="#333" strokeWidth={1} />
+                  <Line points={[0, -4, 0, 4]} stroke="#333" strokeWidth={1} />
+                </Group>
+              )}
+            </Group>
           )}
 
           {tool === 'select' && <Transformer ref={trRef} boundBoxFunc={(oldBox, newBox) => {
