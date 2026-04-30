@@ -6,7 +6,9 @@ import AuthPage from './components/AuthPage';
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('sd_token');
-  if (!token) {
+  const isGuest = localStorage.getItem('sd_guest') === 'true';
+  
+  if (!token && !isGuest) {
     return <Navigate to="/" replace />;
   }
   return children;

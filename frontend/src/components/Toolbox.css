@@ -63,15 +63,22 @@
   margin: 4px 0;
 }
 
-.color-section {
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.color-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.color-section label {
-  font-size: 10px;
+.color-item label {
+  font-size: 8px;
   color: var(--text-secondary);
   text-transform: uppercase;
 }
@@ -80,8 +87,8 @@
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   background-color: transparent;
   border: none;
   cursor: pointer;
@@ -89,13 +96,13 @@
 }
 
 .color-picker::-webkit-color-swatch {
-  border-radius: 50%;
-  border: 2px solid #333;
+  border-radius: 4px;
+  border: 1px solid #444;
 }
 
 .color-picker::-moz-color-swatch {
-  border-radius: 50%;
-  border: 2px solid #333;
+  border-radius: 4px;
+  border: 1px solid #444;
 }
 
 .actions-grid {
@@ -248,13 +255,19 @@
     min-height: 36px;
   }
 
-  .color-section {
+  .settings-section {
+    flex-direction: row;
+    gap: 8px;
+    padding: 0;
+  }
+
+  .color-item {
     flex-direction: row;
     gap: 4px;
     flex-shrink: 0;
   }
 
-  .color-section label {
+  .color-item label {
     display: none;
   }
 
@@ -280,43 +293,110 @@
   }
 }
 
-/* Eraser Size Popup (renders outside toolbox-container) */
-.eraser-size-popup {
+/* Tool Settings Popup (renders outside toolbox-container) */
+.tool-settings-popup {
   position: fixed;
   top: 20px;
   left: 110px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  background-color: #2A2A2A;
+  gap: 12px;
+  background-color: var(--charcoal-light, #2A2A2A);
   border: 1px solid #444;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   z-index: 150;
+  min-width: 180px;
+  backdrop-filter: blur(8px);
 }
 
-.eraser-size-popup label {
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-group label {
   font-size: 10px;
   color: var(--text-secondary, #999);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
+.settings-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #444;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.mini-btn:hover {
+  background-color: var(--sagar-blue);
+  color: white;
+  border-color: var(--sagar-blue);
+}
+
+.settings-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #444;
+  border-radius: 2px;
+  outline: none;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--sagar-blue);
+  cursor: pointer;
+}
+
+.font-select {
+  background: #333;
+  color: var(--text-primary);
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
 @media (max-width: 600px) {
-  .eraser-size-popup {
+  .tool-settings-popup {
     top: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 60px;
+    left: 10px;
+    right: 10px;
+    bottom: 70px;
     flex-direction: row;
-    gap: 10px;
-    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding: 12px;
+    justify-content: center;
+    width: calc(100% - 20px);
   }
 
-  .eraser-size-popup .eraser-slider {
-    width: 80px;
+  .settings-group {
+    flex: 1;
+    min-width: 120px;
   }
 }
 
