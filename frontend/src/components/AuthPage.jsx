@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { PenTool } from 'lucide-react';
+import Logo from './Logo';
 import './AuthPage.css';
 
 const AuthPage = () => {
@@ -29,7 +29,7 @@ const AuthPage = () => {
   return (
     <div className="auth-container">
       <div className="auth-logo-container">
-        <PenTool size={64} className="logo-icon" />
+        <Logo size={120} className="logo-icon" />
         <h1 className="auth-title">Welcome to SD-Draw</h1>
         <p className="auth-subtitle">Your infinite vector canvas.</p>
       </div>

@@ -11,12 +11,18 @@ const useCanvasStore = create((set, get) => ({
   strokeWidth: 2,
   fillColor: 'transparent',
   eraserSize: 10,
+  canvasBgColor: '#1A1A1A',
+  fontSize: 20,
+  fontFamily: 'sans-serif',
   
   setTool: (tool) => set({ tool }),
   setStrokeColor: (strokeColor) => set({ strokeColor }),
   setStrokeWidth: (strokeWidth) => set({ strokeWidth }),
   setFillColor: (fillColor) => set({ fillColor }),
   setEraserSize: (eraserSize) => set({ eraserSize }),
+  setCanvasBgColor: (canvasBgColor) => set({ canvasBgColor }),
+  setFontSize: (fontSize) => set({ fontSize }),
+  setFontFamily: (fontFamily) => set({ fontFamily }),
   
   setElements: (elements, addToHistory = true) => {
     set((state) => {

@@ -19,19 +19,30 @@
 }
 
 .logo-icon {
-  color: #007BFF;
-  animation: pulse 2s infinite ease-in-out;
+  filter: drop-shadow(0 0 15px rgba(0, 123, 255, 0.4));
+  animation: logo-glow 3s infinite alternate ease-in-out;
+}
+
+@keyframes logo-glow {
+  0% {
+    filter: drop-shadow(0 0 10px rgba(0, 123, 255, 0.3)) drop-shadow(0 0 20px rgba(168, 85, 247, 0.2));
+    transform: scale(1);
+  }
+  100% {
+    filter: drop-shadow(0 0 20px rgba(0, 123, 255, 0.6)) drop-shadow(0 0 40px rgba(168, 85, 247, 0.4));
+    transform: scale(1.05);
+  }
 }
 
 .auth-title {
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 800;
   margin-top: 1rem;
-  background: linear-gradient(90deg, #007BFF, #00D2FF);
+  background: linear-gradient(90deg, #007BFF, #A855F7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: pulse 2.5s infinite alternate ease-in-out;
   text-align: center;
+  letter-spacing: -1px;
 }
 
 .auth-subtitle {
