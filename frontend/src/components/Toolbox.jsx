@@ -12,6 +12,42 @@ import useCanvasStore from '../store/useCanvasStore';
 import Logo from './Logo';
 import './Toolbox.css';
 
+const ColorPickerButton = ({ label, value, onChange }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="color-item" style={{ position: 'relative' }}>
+      <label>{label}</label>
+      {/* Full-screen backdrop: closes picker on any touch/click outside */}
+      {open && (
+        <div
+          className="color-picker-backdrop"
+          onMouseDown={() => setOpen(false)}
+          onTouchStart={() => setOpen(false)}
+        />
+      )}
+      <div style={{ position: 'relative', zIndex: open ? 201 : 'auto' }}>
+        <button
+          className="color-picker color-swatch-btn"
+          style={{ backgroundColor: value }}
+          onClick={() => setOpen(o => !o)}
+          title={`${label} Color: ${value}`}
+        />
+        {open && (
+          <div className="color-picker-popup">
+            <label style={{ fontSize: '9px', color: '#999', textTransform: 'uppercase' }}>{label}</label>
+            <input
+              type="color"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              style={{ width: '100%', height: '36px', cursor: 'pointer', border: 'none', background: 'none' }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const Toolbox = () => {
   const {
     tool, setTool, strokeColor, setStrokeColor,
@@ -156,33 +192,9 @@ const Toolbox = () => {
         <div className="toolbox-divider"></div>
 
         <div className="settings-section">
-          <div className="color-item">
-            <label>Stroke</label>
-            <input
-              type="color"
-              value={strokeColor}
-              onChange={(e) => handleStrokeColorChange(e.target.value)}
-              className="color-picker"
-            />
-          </div>
-          <div className="color-item">
-            <label>Fill</label>
-            <input
-              type="color"
-              value={fillColor}
-              onChange={(e) => setFillColor(e.target.value)}
-              className="color-picker"
-            />
-          </div>
-          <div className="color-item">
-            <label>Canvas</label>
-            <input
-              type="color"
-              value={canvasBgColor}
-              onChange={(e) => setCanvasBgColor(e.target.value)}
-              className="color-picker"
-            />
-          </div>
+          <ColorPickerButton label="Stroke" value={strokeColor} onChange={handleStrokeColorChange} />
+          <ColorPickerButton label="Fill" value={fillColor} onChange={setFillColor} />
+          <ColorPickerButton label="Canvas" value={canvasBgColor} onChange={setCanvasBgColor} />
         </div>
 
         <div className="toolbox-divider"></div>

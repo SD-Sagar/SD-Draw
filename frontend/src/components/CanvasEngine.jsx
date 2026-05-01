@@ -163,6 +163,9 @@ const CanvasEngine = () => {
   const trRef = useRef(null);
   const textareaRef = useRef(null);
   const containerRef = useRef(null);
+  // RAF throttle refs for pencil tool (fix touch-pen lag)
+  const pencilPointsRef = useRef([]);
+  const rafPendingRef = useRef(false);
 
   // Collaboration Broadcast
   useEffect(() => {
@@ -831,6 +834,9 @@ const CanvasEngine = () => {
     };
 
     if (tool === 'pencil') {
+      // Reset buffer for the new stroke
+      pencilPointsRef.current = [pos.x, pos.y, pos.x, pos.y];
+      rafPendingRef.current = false;
       // Line needs at least 2 points (4 coordinates) to be visible in some Konva versions
       newElement.points = [pos.x, pos.y, pos.x, pos.y];
     } else if (tool === 'line' || tool === 'arrow') {
@@ -959,7 +965,20 @@ const CanvasEngine = () => {
     const updatedElement = { ...currentElement };
 
     if (tool === 'pencil') {
-      updatedElement.points = [...updatedElement.points, pos.x, pos.y];
+      // Buffer the point and flush to state at most once per animation frame
+      pencilPointsRef.current.push(pos.x, pos.y);
+      if (!rafPendingRef.current) {
+        rafPendingRef.current = true;
+        requestAnimationFrame(() => {
+          rafPendingRef.current = false;
+          if (pencilPointsRef.current.length === 0) return;
+          setCurrentElement(prev => {
+            if (!prev || prev.type !== 'pencil') return prev;
+            return { ...prev, points: [...pencilPointsRef.current] };
+          });
+        });
+      }
+      return; // don't fall through to setCurrentElement below
     } else if (tool === 'line' || tool === 'arrow') {
       updatedElement.points = [updatedElement.points[0], updatedElement.points[1], pos.x, pos.y];
     } else if (tool === 'rect') {
@@ -998,9 +1017,19 @@ const CanvasEngine = () => {
     }
 
     if (currentElement) {
+      // For pencil: flush any buffered points not yet committed via RAF
+      const pencilFinalPoints =
+        currentElement.type === 'pencil' && pencilPointsRef.current.length > 0
+          ? [...pencilPointsRef.current]
+          : null;
+      pencilPointsRef.current = [];
+      rafPendingRef.current = false;
+
       setElements(prev => {
         const finalElement = { ...currentElement };
         if (finalElement.type === 'pencil' && finalElement.points) {
+          // Use buffered points (most up-to-date) if available
+          if (pencilFinalPoints) finalElement.points = pencilFinalPoints;
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (let i = 0; i < finalElement.points.length; i += 2) {
             const px = finalElement.points[i];
