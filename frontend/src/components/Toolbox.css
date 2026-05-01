@@ -689,7 +689,7 @@
 }
 
 @media (max-width: 600px) {
-  .toolbox-toggle-btn {
+  .toolbox-toggle-btn, .keyboard-btn {
     display: none;
   }
 }

@@ -206,7 +206,7 @@ const Toolbox = () => {
           <Download size={18} />
         </button>
         <button 
-          className="action-btn" 
+          className="action-btn keyboard-btn" 
           title="Shortcut Tips" 
           onClick={handleShowShortcuts}
         >
