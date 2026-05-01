@@ -1,8 +1,140 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star, Group } from 'react-konva';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star, Group, Shape } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
 import useCollaboration from '../hooks/useCollaboration';
+
+const scanlineFloodFill = (data, width, height, sx, sy, startColor, tolerance = 32) => {
+  const visited = new Uint8Array(width * height);
+  const lines = []; 
+  
+  const colorMatch = (idx) => {
+    const i = idx * 4;
+    if (startColor[3] === 0 && data[i+3] === 0) return true;
+    return Math.abs(data[i] - startColor[0]) <= tolerance &&
+           Math.abs(data[i+1] - startColor[1]) <= tolerance &&
+           Math.abs(data[i+2] - startColor[2]) <= tolerance &&
+           Math.abs(data[i+3] - startColor[3]) <= tolerance;
+  };
+
+  const stackXY = new Int32Array(width * height * 2);
+  let stackLen = 0;
+  
+  stackXY[stackLen++] = sx;
+  stackXY[stackLen++] = sy;
+  visited[sy * width + sx] = 1;
+  
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+
+  while(stackLen > 0) {
+    const y = stackXY[--stackLen];
+    const x = stackXY[--stackLen];
+    
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    
+    if (x > 0) {
+      const idx = y * width + (x - 1);
+      if (!visited[idx] && colorMatch(idx)) {
+        visited[idx] = 1;
+        stackXY[stackLen++] = x - 1;
+        stackXY[stackLen++] = y;
+      }
+    }
+    if (x < width - 1) {
+      const idx = y * width + (x + 1);
+      if (!visited[idx] && colorMatch(idx)) {
+        visited[idx] = 1;
+        stackXY[stackLen++] = x + 1;
+        stackXY[stackLen++] = y;
+      }
+    }
+    if (y > 0) {
+      const idx = (y - 1) * width + x;
+      if (!visited[idx] && colorMatch(idx)) {
+        visited[idx] = 1;
+        stackXY[stackLen++] = x;
+        stackXY[stackLen++] = y - 1;
+      }
+    }
+    if (y < height - 1) {
+      const idx = (y + 1) * width + x;
+      if (!visited[idx] && colorMatch(idx)) {
+        visited[idx] = 1;
+        stackXY[stackLen++] = x;
+        stackXY[stackLen++] = y + 1;
+      }
+    }
+  }
+  
+  let lMinX = Infinity, lMinY = Infinity, lMaxX = -Infinity, lMaxY = -Infinity;
+  for (let y = minY; y <= maxY; y++) {
+    let startX = -1;
+    for (let x = minX; x <= maxX; x++) {
+      if (visited[y * width + x]) {
+        if (startX === -1) startX = x;
+      } else {
+        if (startX !== -1) {
+          lines.push([startX, y, x - 1, y]);
+          if (startX < lMinX) lMinX = startX;
+          if (x - 1 > lMaxX) lMaxX = x - 1;
+          if (y < lMinY) lMinY = y;
+          if (y > lMaxY) lMaxY = y;
+          startX = -1;
+        }
+      }
+    }
+    if (startX !== -1) {
+      lines.push([startX, y, maxX, y]);
+      if (startX < lMinX) lMinX = startX;
+      if (maxX > lMaxX) lMaxX = maxX;
+      if (y < lMinY) lMinY = y;
+      if (y > lMaxY) lMaxY = y;
+    }
+  }
+  
+  if (lines.length === 0) return null;
+  return { lines, bbox: { minX: lMinX, minY: lMinY, maxX: lMaxX, maxY: lMaxY } };
+};
+
+const segmentsIntersect = (a, b, c, d) => {
+  const ccw = (A, B, C) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
+};
+
+const meshLines = (lines) => {
+  const rects = [];
+  const used = new Uint8Array(lines.length);
+  for (let i = 0; i < lines.length; i++) {
+    if (used[i]) continue;
+    const l = lines[i];
+    let x1 = l[0], y = l[1], x2 = l[2];
+    let h = 1;
+    used[i] = 1;
+    
+    let searchIdx = i + 1;
+    while (searchIdx < lines.length) {
+      let foundMatch = false;
+      const targetY = y + h;
+      for (let j = searchIdx; j < lines.length; j++) {
+        const nextL = lines[j];
+        if (nextL[1] > targetY) break;
+        if (nextL[1] === targetY && !used[j] && nextL[0] === x1 && nextL[2] === x2) {
+          used[j] = 1;
+          h++;
+          foundMatch = true;
+          searchIdx = j + 1;
+          break;
+        }
+      }
+      if (!foundMatch) break;
+    }
+    rects.push({ x: x1, y: y, w: x2 - x1, h: h });
+  }
+  return rects;
+};
 
 const CanvasEngine = () => {
   const { 
@@ -249,60 +381,160 @@ const CanvasEngine = () => {
     setElements((prevElements) => {
       let changed = false;
       const nextElements = prevElements.map(el => {
-        if (el.type !== 'pencil' || !el.points) return el;
-
         const localPos = toLocal(pos, el);
         const localLastPos = lastPos ? toLocal(lastPos, el) : null;
-        
-        // Simple bounding box check
-        const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
-        const elStrokeWidth = el.strokeWidth || 2;
-        const margin = radius + elStrokeWidth + 10;
-        if (localPos.x < bbox.minX - margin || localPos.x > bbox.maxX + margin || 
-            localPos.y < bbox.minY - margin || localPos.y > bbox.maxY + margin) {
-          return el;
-        }
 
-        const newSegments = [];
-        let currentSegment = [];
-        let elChanged = false;
-
-        for (let i = 0; i < el.points.length - 2; i += 2) {
-          const p1 = { x: el.points[i], y: el.points[i + 1] };
-          const p2 = { x: el.points[i + 2], y: el.points[i + 3] };
+        if (el.type === 'pencil' && el.points) {
           
-          const d = distToSegment(localPos, p1, p2);
-          let isHit = d < (radius + elStrokeWidth / 2);
-          if (!isHit && localLastPos) {
-            isHit = distToSegment(p1, localLastPos, localPos) < (radius + elStrokeWidth / 2);
+          const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+          const elStrokeWidth = el.strokeWidth || 2;
+          const margin = radius + elStrokeWidth + 10;
+          if (localPos.x < bbox.minX - margin || localPos.x > bbox.maxX + margin || 
+              localPos.y < bbox.minY - margin || localPos.y > bbox.maxY + margin) {
+            return el;
           }
 
-          if (isHit) {
-            if (currentSegment.length >= 4) newSegments.push(currentSegment);
-            currentSegment = [];
-            elChanged = true;
-          } else {
-            if (currentSegment.length === 0) currentSegment.push(p1.x, p1.y);
-            currentSegment.push(p2.x, p2.y);
-          }
-        }
-        if (currentSegment.length >= 4) newSegments.push(currentSegment);
+          const newSegments = [];
+          let currentSegment = [];
+          let elChanged = false;
 
-        if (elChanged) {
-          changed = true;
-          return newSegments.map((seg, idx) => {
-            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
-            for (let k = 0; k < seg.length; k += 2) {
-              if (seg[k] < sMinX) sMinX = seg[k]; if (seg[k] > sMaxX) sMaxX = seg[k];
-              if (seg[k+1] < sMinY) sMinY = seg[k+1]; if (seg[k+1] > sMaxY) sMaxY = seg[k+1];
+          for (let i = 0; i < el.points.length - 2; i += 2) {
+            const p1 = { x: el.points[i], y: el.points[i + 1] };
+            const p2 = { x: el.points[i + 2], y: el.points[i + 3] };
+            
+            const d = distToSegment(localPos, p1, p2);
+            let isHit = d < (radius + elStrokeWidth / 2);
+            if (!isHit && localLastPos) {
+              isHit = distToSegment(p1, localLastPos, localPos) < (radius + elStrokeWidth / 2);
             }
-            return {
+
+            if (isHit) {
+              if (currentSegment.length >= 4) newSegments.push(currentSegment);
+              currentSegment = [];
+              elChanged = true;
+            } else {
+              if (currentSegment.length === 0) currentSegment.push(p1.x, p1.y);
+              currentSegment.push(p2.x, p2.y);
+            }
+          }
+          if (currentSegment.length >= 4) newSegments.push(currentSegment);
+
+          if (elChanged) {
+            changed = true;
+            return newSegments.map((seg, idx) => {
+              let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+              for (let k = 0; k < seg.length; k += 2) {
+                if (seg[k] < sMinX) sMinX = seg[k]; if (seg[k] > sMaxX) sMaxX = seg[k];
+                if (seg[k+1] < sMinY) sMinY = seg[k+1]; if (seg[k+1] > sMaxY) sMaxY = seg[k+1];
+              }
+              return {
+                ...el,
+                id: idx === 0 ? el.id : uuidv4(),
+                points: seg,
+                bbox: { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
+              };
+            });
+          }
+          return el;
+        } else if (el.type === 'fill') {
+          const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+          const margin = radius + 10;
+          if (localPos.x < bbox.minX - margin || localPos.x > bbox.maxX + margin || 
+              localPos.y < bbox.minY - margin || localPos.y > bbox.maxY + margin) {
+            return el;
+          }
+
+          let elChanged = false;
+          const newLines = [];
+          
+          for (let i = 0; i < el.lines.length; i++) {
+            const line = el.lines[i];
+            const p1 = { x: line[0], y: line[1] };
+            const p2 = { x: line[2], y: line[3] };
+            
+            const d = distToSegment(localPos, p1, p2);
+            let isHit = d < radius;
+            
+            if (!isHit && localLastPos) {
+              const eraseMinX = Math.min(localPos.x, localLastPos.x) - radius;
+              const eraseMaxX = Math.max(localPos.x, localLastPos.x) + radius;
+              const eraseMinY = Math.min(localPos.y, localLastPos.y) - radius;
+              const eraseMaxY = Math.max(localPos.y, localLastPos.y) + radius;
+              
+              if (p1.y >= eraseMinY && p1.y <= eraseMaxY &&
+                  Math.max(p1.x, eraseMinX) <= Math.min(p2.x, eraseMaxX)) {
+                isHit = distToSegment(p1, localLastPos, localPos) < radius ||
+                        distToSegment(p2, localLastPos, localPos) < radius ||
+                        distToSegment(localPos, p1, p2) < radius ||
+                        distToSegment(localLastPos, p1, p2) < radius ||
+                        segmentsIntersect(p1, p2, localLastPos, localPos);
+              }
+            }
+            
+            if (isHit) {
+              elChanged = true;
+              let eraseLeft, eraseRight;
+              
+              if (!localLastPos) {
+                eraseLeft = localPos.x - radius;
+                eraseRight = localPos.x + radius;
+              } else {
+                const dy = localPos.y - localLastPos.y;
+                const dx = localPos.x - localLastPos.x;
+                
+                if (Math.abs(dy) < 0.1) {
+                  eraseLeft = Math.min(localPos.x, localLastPos.x) - radius;
+                  eraseRight = Math.max(localPos.x, localLastPos.x) + radius;
+                } else {
+                  const t = (p1.y - localLastPos.y) / dy;
+                  if (t >= 0 && t <= 1) {
+                    const xInt = localLastPos.x + dx * t;
+                    const cutWidth = radius * 1.2;
+                    eraseLeft = xInt - cutWidth;
+                    eraseRight = xInt + cutWidth;
+                  } else {
+                    const cx = (localPos.x + localLastPos.x) / 2;
+                    eraseLeft = cx - radius;
+                    eraseRight = cx + radius;
+                  }
+                }
+              }
+              
+              if (p1.x < eraseLeft && p2.x > eraseRight) {
+                newLines.push([p1.x, p1.y, eraseLeft, p1.y]);
+                newLines.push([eraseRight, p1.y, p2.x, p2.y]);
+              } else if (p1.x >= eraseLeft && p2.x <= eraseRight) {
+                // Erased
+              } else if (p1.x < eraseLeft && p2.x <= eraseRight && p2.x >= eraseLeft) {
+                newLines.push([p1.x, p1.y, eraseLeft, p1.y]);
+              } else if (p1.x >= eraseLeft && p1.x <= eraseRight && p2.x > eraseRight) {
+                newLines.push([eraseRight, p1.y, p2.x, p2.y]);
+              } else {
+                newLines.push(line);
+              }
+            } else {
+              newLines.push(line);
+            }
+          }
+          
+          if (elChanged) {
+            changed = true;
+            if (newLines.length === 0) return [];
+            
+            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+            for (let k = 0; k < newLines.length; k++) {
+              const l = newLines[k];
+              if (l[0] < sMinX) sMinX = l[0]; if (l[2] > sMaxX) sMaxX = l[2];
+              if (l[1] < sMinY) sMinY = l[1]; if (l[1] > sMaxY) sMaxY = l[1];
+            }
+            
+            return [{
               ...el,
-              id: idx === 0 ? el.id : uuidv4(),
-              points: seg,
+              lines: newLines,
               bbox: { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
-            };
-          });
+            }];
+          }
+          return el;
         }
         return el;
       }).flat();
@@ -403,6 +635,17 @@ const CanvasEngine = () => {
       const tw = el.width || 100, th = el.fontSize || 20;
       if (localPos.x >= -threshold && localPos.x <= tw + threshold && localPos.y >= -threshold && localPos.y <= th + threshold) return true;
       if (localLastPos && (localLastPos.x >= -threshold && localLastPos.x <= tw + threshold && localLastPos.y >= -threshold && localLastPos.y <= th + threshold)) return true;
+    } else if (el.type === 'fill') {
+      const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+      const hitBbox = localPos.x >= bbox.minX - threshold && localPos.x <= bbox.maxX + threshold &&
+                      localPos.y >= bbox.minY - threshold && localPos.y <= bbox.maxY + threshold;
+      if (hitBbox && el.lines) {
+        for (let j = 0; j < el.lines.length; j++) {
+          const p1 = { x: el.lines[j][0], y: el.lines[j][1] };
+          const p2 = { x: el.lines[j][2], y: el.lines[j][3] };
+          if (isSwipeHit(p1, p2)) return true;
+        }
+      }
     }
     return false;
   };
@@ -416,7 +659,13 @@ const CanvasEngine = () => {
 
     const evt = e.evt;
     // For mouse: skip middle/right click
-    if (evt.button === 1 || evt.button === 2) return;
+    if (!ctrlPressed) {
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+    }
+
+    if (ctrlPressed || evt.button === 1 || evt.button === 2) return;
 
     // For touch: if two fingers, cancel any drawing and start pinch
     if (evt.touches && evt.touches.length >= 2) {
@@ -494,6 +743,65 @@ const CanvasEngine = () => {
       return;
     }
 
+    if (tool === 'fill') {
+      const stage = stageRef.current;
+      const screenPos = stage.getPointerPosition();
+      if (!screenPos) return;
+      
+      const canvas = stage.toCanvas({ pixelRatio: 1 });
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      
+      const sx = Math.floor(screenPos.x);
+      const sy = Math.floor(screenPos.y);
+      
+      if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+        const startIdx = (sy * width + sx) * 4;
+        const startColor = [
+          imageData.data[startIdx],
+          imageData.data[startIdx+1],
+          imageData.data[startIdx+2],
+          imageData.data[startIdx+3]
+        ];
+        
+        const result = scanlineFloodFill(imageData.data, width, height, sx, sy, startColor, 32);
+        
+        if (result && result.lines.length > 0) {
+          const logicalLines = result.lines.map(l => [
+            (l[0] - stage.x()) / stage.scaleX(),
+            (l[1] - stage.y()) / stage.scaleY(),
+            (l[2] - stage.x()) / stage.scaleX(),
+            (l[3] - stage.y()) / stage.scaleY()
+          ]);
+          
+          const logicalBbox = {
+            minX: (result.bbox.minX - stage.x()) / stage.scaleX(),
+            minY: (result.bbox.minY - stage.y()) / stage.scaleY(),
+            maxX: (result.bbox.maxX - stage.x()) / stage.scaleX(),
+            maxY: (result.bbox.maxY - stage.y()) / stage.scaleY(),
+          };
+          
+          const newFill = {
+            id: uuidv4(),
+            type: 'fill',
+            fill: fillColor,
+            lines: logicalLines,
+            bbox: logicalBbox,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1
+          };
+          
+          setElements(prev => [...prev, newFill], true);
+        }
+      }
+      return;
+    }
+
     if (tool === 'eraser' && !ctrlPressed) {
       setIsDrawing(true);
       setEraserPath([pos.x, pos.y]);
@@ -517,7 +825,7 @@ const CanvasEngine = () => {
       type: tool,
       stroke: strokeColor,
       strokeWidth: Number(strokeWidth) || 2,
-      fill: fillColor,
+      rotation: 0,
       x: 0,
       y: 0
     };
@@ -615,14 +923,24 @@ const CanvasEngine = () => {
 
       // Use functional update to find and mark elements to delete
       setElements((prevElements) => {
-        let hitId = null;
+        let hitFillId = null;
+        let hitOtherId = null;
+        
         for (let i = prevElements.length - 1; i >= 0; i--) {
           const el = prevElements[i];
+          if (elementsToDelete.has(el.id)) continue;
+          
           if (checkObjectHit(el, pos, lastPos)) {
-            hitId = el.id;
-            break;
+            if (el.type === 'fill') {
+              hitFillId = el.id;
+              break;
+            } else if (!hitOtherId) {
+              hitOtherId = el.id;
+            }
           }
         }
+        
+        const hitId = hitFillId || hitOtherId;
         
         if (hitId) {
           setElementsToDelete(prev => {
@@ -771,31 +1089,88 @@ const CanvasEngine = () => {
   const handleDragStart = (e) => {
     const id = e.target.id();
     const draggedNode = e.target;
-    const draggedRect = draggedNode.getClientRect();
-    const draggedArea = draggedRect.width * draggedRect.height;
     const draggedIndex = elements.findIndex(el => el.id === id);
+    const draggedEl = elements[draggedIndex];
+
+    const getElRect = (el, node) => {
+      if (el.type === 'fill' && el.bbox) {
+        const stage = stageRef.current;
+        const scale = stage.scaleX();
+        return {
+          x: (el.bbox.minX + el.x) * scale + stage.x(),
+          y: (el.bbox.minY + el.y) * scale + stage.y(),
+          width: (el.bbox.maxX - el.bbox.minX) * scale,
+          height: (el.bbox.maxY - el.bbox.minY) * scale
+        };
+      }
+      return node.getClientRect();
+    };
+
+    const draggedRect = getElRect(draggedEl, draggedNode);
+    const draggedArea = draggedRect.width * draggedRect.height;
+    
+    let logicalDraggedIndex = draggedIndex;
+    if (draggedEl.type === 'fill') {
+      const parentIndex = elements.findIndex((el) => {
+        if (el.id === id) return false;
+        const node = stageRef.current.findOne(`#${el.id}`);
+        if (!node) return false;
+        const rect = getElRect(el, node);
+        const rectArea = rect.width * rect.height;
+        const isParent = 
+          draggedRect.x >= rect.x - 10 &&
+          draggedRect.y >= rect.y - 10 &&
+          draggedRect.x + draggedRect.width <= rect.x + rect.width + 10 &&
+          draggedRect.y + draggedRect.height <= rect.y + rect.height + 10;
+        return isParent && rectArea < draggedArea * 3;
+      });
+      if (parentIndex !== -1) {
+        logicalDraggedIndex = Math.min(draggedIndex, parentIndex);
+      }
+    }
 
     // Identify child elements (those entirely within the dragged element)
     const children = elements.filter((el, index) => {
       if (el.id === id) return false;
       
-      // Only include elements that are "above" the dragged element in z-index
-      // and were placed after it (or are smaller)
-      if (index < draggedIndex) return false;
-
       const node = stageRef.current.findOne(`#${el.id}`);
       if (!node) return false;
-      const rect = node.getClientRect();
+      
+      const rect = getElRect(el, node);
       const rectArea = rect.width * rect.height;
+
+      // A shape and its fill should always be grouped.
+      const isMatch = Math.abs(rect.x - draggedRect.x) <= 10 &&
+                      Math.abs(rect.y - draggedRect.y) <= 10 &&
+                      Math.abs(rect.width - draggedRect.width) <= 20 &&
+                      Math.abs(rect.height - draggedRect.height) <= 20;
+                      
+      if (isMatch && (el.type === 'fill' || draggedEl.type === 'fill')) {
+        return true;
+      }
+      
+      const draggedIsFill = draggedEl.type === 'fill';
+      if (draggedIsFill) {
+        const isParent = 
+          draggedRect.x >= rect.x - 10 &&
+          draggedRect.y >= rect.y - 10 &&
+          draggedRect.x + draggedRect.width <= rect.x + rect.width + 10 &&
+          draggedRect.y + draggedRect.height <= rect.y + rect.height + 10;
+          
+        if (isParent && rectArea < draggedArea * 3) return true;
+      }
+
+      // Only include elements that are "above" the logical parent element in z-index
+      if (index < logicalDraggedIndex) return false;
 
       // Child must be smaller than parent to avoid accidental grouping
       if (rectArea >= draggedArea) return false;
       
       return (
-        rect.x >= draggedRect.x &&
-        rect.y >= draggedRect.y &&
-        rect.x + rect.width <= draggedRect.x + draggedRect.width &&
-        rect.y + rect.height <= draggedRect.y + draggedRect.height
+        rect.x >= draggedRect.x - 5 &&
+        rect.y >= draggedRect.y - 5 &&
+        rect.x + rect.width <= draggedRect.x + draggedRect.width + 5 &&
+        rect.y + rect.height <= draggedRect.y + draggedRect.height + 5
       );
     }).map(el => ({
       id: el.id,
@@ -920,10 +1295,51 @@ const CanvasEngine = () => {
             visible={!textInput || textInput.id !== el.id}
           />
         );
+      case 'fill':
+        return (
+          <Shape
+            {...commonProps}
+            key={`${el.id}-${el.lines.length}`}
+            ref={(node) => {
+              if (node && !node.isCached() && el.bbox) {
+                node.cache({
+                  x: el.bbox.minX - 5,
+                  y: el.bbox.minY - 5,
+                  width: el.bbox.maxX - el.bbox.minX + 10,
+                  height: el.bbox.maxY - el.bbox.minY + 10,
+                  pixelRatio: 2
+                });
+              }
+            }}
+            sceneFunc={(context, shape) => {
+              const rects = meshLines(el.lines);
+              context.beginPath();
+              for (let i = 0; i < rects.length; i++) {
+                const r = rects[i];
+                context.rect(r.x - 0.5, r.y - 0.5, r.w + 1.0, r.h + 1.0);
+              }
+              context.fillStyle = isMarkedForDeletion ? '#ff4d4d33' : el.fill;
+              context.fill();
+            }}
+            hitFunc={(context, shape) => {
+              const rects = meshLines(el.lines);
+              context.beginPath();
+              for (let i = 0; i < rects.length; i++) {
+                const r = rects[i];
+                context.rect(r.x - 0.5, r.y - 0.5, r.w + 1.0, r.h + 1.0);
+              }
+              context.fillStrokeShape(shape);
+            }}
+          />
+        );
       default:
         return null;
     }
   };
+
+  const memoizedElements = useMemo(() => {
+    return elements.map(renderElement);
+  }, [elements, elementsToDelete, tool, ctrlPressed, textInput]);
 
   return (
     <div
@@ -958,7 +1374,7 @@ const CanvasEngine = () => {
         ref={stageRef}
       >
         <Layer>
-          {elements.map(renderElement)}
+          {memoizedElements}
           {currentElement && renderElement(currentElement)}
           
           {/* Visual Eraser Path (Object Eraser) - only when actually drawing/erasing multiple */}

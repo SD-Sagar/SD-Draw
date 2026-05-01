@@ -16,5 +16,4 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--charcoal);
   color: var(--text-primary);
-  overflow: hidden;
 }
