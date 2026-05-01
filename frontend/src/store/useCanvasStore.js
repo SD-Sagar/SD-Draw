@@ -24,6 +24,7 @@ const useCanvasStore = create((set, get) => ({
   setPrecisionEraserSize: (precisionEraserSize) => set({ precisionEraserSize }),
   setCanvasBgColor: (canvasBgColor) => set({ canvasBgColor }),
   setFontSize: (fontSize) => set({ fontSize }),
+  setFontFamily: (fontFamily) => set({ fontFamily }),
   // Collaboration state
   peerId: null,
   connections: [],
