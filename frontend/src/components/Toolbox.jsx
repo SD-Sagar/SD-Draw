@@ -3,7 +3,7 @@ import {
   MousePointer2, Pencil, Eraser, Square, Circle, Triangle, Star, 
   Type, Undo2, Redo2, Download, Save, FolderOpen, LogOut,
   Minus, ArrowRight, Plus, Minus as MinusIcon, PencilLine,
-  Diamond, Pentagon, Hexagon
+  Diamond, Pentagon, Hexagon, Users, Copy, Check, Link
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -18,8 +18,12 @@ const Toolbox = () => {
     eraserSize, setEraserSize, precisionEraserSize, setPrecisionEraserSize,
     canvasBgColor, setCanvasBgColor,
     fontSize, setFontSize, fontFamily, setFontFamily,
-    elements, setElements, undo, redo, clearStore
+    elements, setElements, undo, redo, clearStore,
+    peerId, connections, isCollaborating
   } = useCanvasStore();
+  
+  const [roomInput, setRoomInput] = React.useState('');
+  const [copied, setCopied] = React.useState(false);
 
   const navigate = useNavigate();
 
@@ -178,8 +182,66 @@ const Toolbox = () => {
         <button className="action-btn" title="Export to PNG" onClick={() => window.dispatchEvent(new CustomEvent('export-canvas'))} style={{ gridColumn: 'span 2' }}>
           <Download size={18} />
         </button>
-        <button className="action-btn" title="Logout" onClick={handleLogout} style={{ gridColumn: 'span 2', color: '#ff4d4d' }}>
-          <LogOut size={18} />
+      </div>
+
+      <div className="toolbox-divider"></div>
+
+      <div className="toolbox-header">Collaboration</div>
+      <div className="collab-section">
+        <div className="peer-id-container">
+          <label>Your ID</label>
+          <div className="peer-id-box">
+            <span>{peerId ? peerId.substring(0, 8) + '...' : 'Loading...'}</span>
+            <button 
+              className="icon-btn" 
+              onClick={() => {
+                if (peerId) {
+                  navigator.clipboard.writeText(peerId);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+              title="Copy Peer ID"
+            >
+              {copied ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+            </button>
+          </div>
+        </div>
+
+        <div className="join-container">
+          <input 
+            type="text" 
+            placeholder="Enter Room ID" 
+            value={roomInput}
+            onChange={(e) => setRoomInput(e.target.value)}
+            className="room-input"
+          />
+          <button 
+            className="join-btn"
+            onClick={() => {
+              if (roomInput) {
+                // This will be handled by a global event or the hook
+                window.dispatchEvent(new CustomEvent('join-room', { detail: roomInput }));
+                setRoomInput('');
+              }
+            }}
+          >
+            Join
+          </button>
+        </div>
+
+        <div className="collab-status">
+          <div className={`status-dot ${isCollaborating ? 'active' : ''}`}></div>
+          <span>{isCollaborating ? `${connections.length} Peer(s)` : 'Solo Mode'}</span>
+        </div>
+      </div>
+
+      <div className="toolbox-divider"></div>
+      
+      <div className="logout-section">
+        <button className="premium-logout-btn" onClick={handleLogout}>
+          <LogOut size={16} />
+          <span>Logout</span>
         </button>
       </div>
     </div>

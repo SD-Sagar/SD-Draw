@@ -24,16 +24,31 @@ const useCanvasStore = create((set, get) => ({
   setPrecisionEraserSize: (precisionEraserSize) => set({ precisionEraserSize }),
   setCanvasBgColor: (canvasBgColor) => set({ canvasBgColor }),
   setFontSize: (fontSize) => set({ fontSize }),
-  setFontFamily: (fontFamily) => set({ fontFamily }),
+  // Collaboration state
+  peerId: null,
+  connections: [],
+  isCollaborating: false,
+  lastUpdateRemote: false,
   
-  setElements: (elements, addToHistory = true) => {
+  setPeerId: (peerId) => set({ peerId }),
+  setCollaborating: (isCollaborating) => set({ isCollaborating }),
+  addConnection: (conn) => set((state) => ({ connections: [...state.connections, conn] })),
+  removeConnection: (peerId) => set((state) => ({ 
+    connections: state.connections.filter(c => c.peer !== peerId) 
+  })),
+  
+  setElements: (elementsOrFn, addToHistory = true, isRemote = false) => {
     set((state) => {
-      if (!addToHistory) return { elements };
+      const elements = typeof elementsOrFn === 'function' ? elementsOrFn(state.elements) : elementsOrFn;
+      
+      if (!addToHistory) return { elements, lastUpdateRemote: isRemote };
       
       const newHistory = state.history.slice(0, state.historyStep + 1);
       newHistory.push(elements);
+      
       return {
         elements,
+        lastUpdateRemote: isRemote,
         history: newHistory,
         historyStep: newHistory.length - 1
       };
@@ -62,7 +77,22 @@ const useCanvasStore = create((set, get) => ({
     });
   },
   
-  clearStore: () => set({ elements: [], history: [[]], historyStep: 0 })
+  clearStore: () => {
+    const { connections } = get();
+    connections.forEach(conn => {
+      if (conn.open) conn.close();
+    });
+    
+    set({ 
+      elements: [], 
+      history: [[]], 
+      historyStep: 0,
+      connections: [],
+      isCollaborating: false,
+      peerId: null,
+      lastUpdateRemote: false
+    });
+  }
 }));
 
 export default useCanvasStore;

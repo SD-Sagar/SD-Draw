@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star, Group } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
+import useCollaboration from '../hooks/useCollaboration';
 
 const CanvasEngine = () => {
   const { 
@@ -10,8 +11,10 @@ const CanvasEngine = () => {
     eraserSize, setEraserSize, precisionEraserSize, setPrecisionEraserSize,
     canvasBgColor, setCanvasBgColor, 
     fontSize, setFontSize, fontFamily, setFontFamily, 
-    undo, redo 
+    undo, redo, isCollaborating, lastUpdateRemote
   } = useCanvasStore();
+
+  const { broadcast } = useCollaboration();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -28,6 +31,13 @@ const CanvasEngine = () => {
   const trRef = useRef(null);
   const textareaRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Collaboration Broadcast
+  useEffect(() => {
+    if (isCollaborating && !lastUpdateRemote) {
+      broadcast({ type: 'ELEMENTS_UPDATE', elements });
+    }
+  }, [elements, isCollaborating, lastUpdateRemote, broadcast]);
 
   useEffect(() => {
     if (textInput && textareaRef.current) {
@@ -209,12 +219,130 @@ const CanvasEngine = () => {
 
   const performPrecisionErase = (pos, lastPos) => {
     const radius = (precisionEraserSize || 10) / 2;
-    const radiusSq = radius * radius;
-    let elementsChanged = false;
-    const nextElements = [];
 
-    // Helper: Distance from point p to line segment v-w
+    const toLocal = (p, el) => {
+      const ex = el.x || 0;
+      const ey = el.y || 0;
+      const rot = (el.rotation || 0) * Math.PI / 180;
+      const sx = el.scaleX || 1;
+      const sy = el.scaleY || 1;
+      let x = p.x - ex;
+      let y = p.y - ey;
+      if (rot !== 0) {
+        const cos = Math.cos(-rot);
+        const sin = Math.sin(-rot);
+        const rx = x * cos - y * sin;
+        const ry = x * sin + y * cos;
+        x = rx; y = ry;
+      }
+      x /= sx; y /= sy;
+      return { x, y };
+    };
+
     const distToSegment = (p, v, w) => {
+      const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+      if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
+      let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
+      return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
+    };
+
+    setElements((prevElements) => {
+      let changed = false;
+      const nextElements = prevElements.map(el => {
+        if (el.type !== 'pencil' || !el.points) return el;
+
+        const localPos = toLocal(pos, el);
+        const localLastPos = lastPos ? toLocal(lastPos, el) : null;
+        
+        // Simple bounding box check
+        const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+        const elStrokeWidth = el.strokeWidth || 2;
+        const margin = radius + elStrokeWidth + 10;
+        if (localPos.x < bbox.minX - margin || localPos.x > bbox.maxX + margin || 
+            localPos.y < bbox.minY - margin || localPos.y > bbox.maxY + margin) {
+          return el;
+        }
+
+        const newSegments = [];
+        let currentSegment = [];
+        let elChanged = false;
+
+        for (let i = 0; i < el.points.length - 2; i += 2) {
+          const p1 = { x: el.points[i], y: el.points[i + 1] };
+          const p2 = { x: el.points[i + 2], y: el.points[i + 3] };
+          
+          const d = distToSegment(localPos, p1, p2);
+          let isHit = d < (radius + elStrokeWidth / 2);
+          if (!isHit && localLastPos) {
+            isHit = distToSegment(p1, localLastPos, localPos) < (radius + elStrokeWidth / 2);
+          }
+
+          if (isHit) {
+            if (currentSegment.length >= 4) newSegments.push(currentSegment);
+            currentSegment = [];
+            elChanged = true;
+          } else {
+            if (currentSegment.length === 0) currentSegment.push(p1.x, p1.y);
+            currentSegment.push(p2.x, p2.y);
+          }
+        }
+        if (currentSegment.length >= 4) newSegments.push(currentSegment);
+
+        if (elChanged) {
+          changed = true;
+          return newSegments.map((seg, idx) => {
+            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+            for (let k = 0; k < seg.length; k += 2) {
+              if (seg[k] < sMinX) sMinX = seg[k]; if (seg[k] > sMaxX) sMaxX = seg[k];
+              if (seg[k+1] < sMinY) sMinY = seg[k+1]; if (seg[k+1] > sMaxY) sMaxY = seg[k+1];
+            }
+            return {
+              ...el,
+              id: idx === 0 ? el.id : uuidv4(),
+              points: seg,
+              bbox: { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
+            };
+          });
+        }
+        return el;
+      }).flat();
+
+      return changed ? nextElements : prevElements;
+    }, false);
+  };
+
+  const checkObjectHit = (el, pos, lastPos) => {
+    const baseThreshold = 3;
+    const sw = el.strokeWidth || 2;
+    const threshold = baseThreshold + sw / 2;
+
+    // 1. Setup transform helper
+    const ex = el.x || 0;
+    const ey = el.y || 0;
+    const rot = (el.rotation || 0) * Math.PI / 180;
+    const sx = el.scaleX || 1;
+    const sy = el.scaleY || 1;
+
+    // Helper: Transform global point to local element space
+    const toLocal = (p) => {
+      let x = p.x - ex;
+      let y = p.y - ey;
+      if (rot !== 0) {
+        const cos = Math.cos(-rot);
+        const sin = Math.sin(-rot);
+        const rx = x * cos - y * sin;
+        const ry = x * sin + y * cos;
+        x = rx; y = ry;
+      }
+      x /= sx; y /= sy;
+      return { x, y };
+    };
+
+    const localPos = toLocal(pos);
+    const localLastPos = lastPos ? toLocal(lastPos) : null;
+
+    // 2. Distance to Segment helper
+    const dts = (p, v, w) => {
       const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
       if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
       let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
@@ -222,121 +350,61 @@ const CanvasEngine = () => {
       return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
     };
 
-    // Advanced Clipping Helper: Finds intersections of segment P1P2 with circle C,R
-    const getCircleSegmentIntersections = (p1, p2, c, r) => {
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const fx = p1.x - c.x;
-      const fy = p1.y - c.y;
-
-      const a = dx * dx + dy * dy;
-      const b = 2 * (fx * dx + fy * dy);
-      const c_val = fx * fx + fy * fy - r * r;
-
-      let discriminant = b * b - 4 * a * c_val;
-      if (discriminant < 0) return [];
-      
-      discriminant = Math.sqrt(discriminant);
-      const t1 = (-b - discriminant) / (2 * a);
-      const t2 = (-b + discriminant) / (2 * a);
-
-      const points = [];
-      if (t1 >= 0 && t1 <= 1) points.push({ x: p1.x + t1 * dx, y: p1.y + t1 * dy });
-      if (t2 >= 0 && t2 <= 1) points.push({ x: p1.x + t2 * dx, y: p1.y + t2 * dy });
-      return points;
+    // Helper: Check if eraser swipe (localLastPos -> localPos) hits a segment v-w
+    const isSwipeHit = (v, w) => {
+      if (!localLastPos) return dts(localPos, v, w) < threshold;
+      // Check segment-to-segment by sampling or checking distances to endpoints
+      return dts(v, localLastPos, localPos) < threshold || 
+             dts(w, localLastPos, localPos) < threshold ||
+             dts(localPos, v, w) < threshold ||
+             dts(localLastPos, v, w) < threshold;
     };
-    for (const el of elements) {
-      if (el.type === 'pencil' && el.points) {
-        const ex = el.x || 0;
-        const ey = el.y || 0;
-        const localPos = { x: pos.x - ex, y: pos.y - ey };
-        const localLastPos = lastPos ? { x: lastPos.x - ex, y: lastPos.y - ey } : null;
 
-        // Bounding box check for performance - account for movement path
-        const bbox = el.bbox || { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
-        const elStrokeWidth = el.strokeWidth || 2;
-        const margin = radius + elStrokeWidth + 20;
-        
-        const minEraserX = localLastPos ? Math.min(localPos.x, localLastPos.x) : localPos.x;
-        const maxEraserX = localLastPos ? Math.max(localPos.x, localLastPos.x) : localPos.x;
-        const minEraserY = localLastPos ? Math.min(localPos.y, localLastPos.y) : localPos.y;
-        const maxEraserY = localLastPos ? Math.max(localPos.y, localLastPos.y) : localPos.y;
-
-        if (maxEraserX < bbox.minX - margin || minEraserX > bbox.maxX + margin || 
-            maxEraserY < bbox.minY - margin || minEraserY > bbox.maxY + margin) {
-          nextElements.push(el);
-          continue;
+    if (el.type === 'pencil' || el.type === 'line' || el.type === 'arrow') {
+      if (el.points) {
+        for (let j = 0; j < el.points.length - 2; j += 2) {
+          if (isSwipeHit({x:el.points[j], y:el.points[j+1]}, {x:el.points[j+2], y:el.points[j+3]})) return true;
         }
-
-        const newSegments = [];
-        let currentSegment = [];
-
-        for (let i = 0; i < el.points.length - 2; i += 2) {
-          const p1 = { x: el.points[i], y: el.points[i + 1] };
-          const p2 = { x: el.points[i + 2], y: el.points[i + 3] };
-
-          // Calculate distance from eraser center to the pencil segment
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-          const l2 = dx * dx + dy * dy;
-          let t = l2 === 0 ? 0 : ((localPos.x - p1.x) * dx + (localPos.y - p1.y) * dy) / l2;
-          t = Math.max(0, Math.min(1, t));
-          const closestPoint = { x: p1.x + t * dx, y: p1.y + t * dy };
-          const dist = Math.sqrt(Math.pow(localPos.x - closestPoint.x, 2) + Math.pow(localPos.y - closestPoint.y, 2));
-
-          // Trigger hit if eraser touches the VISUAL body (path + strokeWidth/2)
-          // Also check swipe from lastPos
-          let isHit = dist < (radius + elStrokeWidth / 2);
-          if (!isHit && localLastPos) {
-            // Check if p1 or p2 was passed by the eraser's movement segment
-            isHit = distToSegment(p1, localLastPos, localPos) < (radius + elStrokeWidth / 2);
-          }
-
-          if (isHit) {
-            // FULL BREAK: Split the line at this segment
-            // To create a visible gap, we discard this segment and potentially trim adjacent ones
-            if (currentSegment.length >= 4) {
-              // Finish the current line before the break
-              // Optional: trim the end of currentSegment to leave a gap
-              newSegments.push(currentSegment);
-            }
-            currentSegment = []; // Start fresh after the break
-            elementsChanged = true;
-          } else {
-            if (currentSegment.length === 0) currentSegment.push(p1.x, p1.y);
-            currentSegment.push(p2.x, p2.y);
-          }
-        }
-        
-        if (currentSegment.length >= 4) newSegments.push(currentSegment);
-
-        if (newSegments.length === 0) {
-          elementsChanged = true;
-        } else if (newSegments.length === 1 && newSegments[0].length === el.points.length && !elementsChanged) {
-          nextElements.push(el);
-        } else {
-          newSegments.forEach((seg, idx) => {
-            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
-            for (let k = 0; k < seg.length; k += 2) {
-              if (seg[k] < sMinX) sMinX = seg[k]; if (seg[k] > sMaxX) sMaxX = seg[k];
-              if (seg[k+1] < sMinY) sMinY = seg[k+1]; if (seg[k+1] > sMaxY) sMaxY = seg[k+1];
-            }
-            nextElements.push({
-              ...el,
-              id: idx === 0 ? el.id : uuidv4(),
-              points: seg,
-              bbox: { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
-            });
-          });
+      }
+    } else if (el.type === 'rect') {
+      const w = el.width || 0, h = el.height || 0;
+      if (isSwipeHit({x:0, y:0}, {x:w, y:0}) || isSwipeHit({x:w, y:0}, {x:w, y:h}) ||
+          isSwipeHit({x:w, y:h}, {x:0, y:h}) || isSwipeHit({x:0, y:h}, {x:0, y:0})) return true;
+    } else if (el.type === 'circle') {
+      const r = el.radius || 0;
+      const d1 = Math.sqrt(localPos.x**2 + localPos.y**2);
+      if (localLastPos) {
+        const d2 = Math.sqrt(localLastPos.x**2 + localLastPos.y**2);
+        if ((d1 < r && d2 > r) || (d1 > r && d2 < r)) return true;
+        return dts({x:0, y:0}, localLastPos, localPos) > r - threshold && dts({x:0, y:0}, localLastPos, localPos) < r + threshold;
+      }
+      if (Math.abs(d1 - r) < threshold) return true;
+    } else if (['triangle', 'diamond', 'pentagon', 'hexagon', 'star'].includes(el.type)) {
+      const sides = el.type === 'triangle' ? 3 : (el.type === 'diamond' ? 4 : (el.type === 'pentagon' ? 5 : (el.type === 'hexagon' ? 6 : 10)));
+      const pts = [];
+      if (el.type === 'star') {
+        const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
+        for (let n = 0; n < 10; n++) {
+          const r = n % 2 === 0 ? r1 : r2;
+          const angle = (n * Math.PI) / 5;
+          pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
         }
       } else {
-        nextElements.push(el);
+        const r = el.radius || 0;
+        for (let n = 0; n < sides; n++) {
+          const angle = (n * 2 * Math.PI) / sides;
+          pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
+        }
       }
+      for (let n = 0; n < pts.length; n++) {
+        if (isSwipeHit(pts[n], pts[(n+1) % pts.length])) return true;
+      }
+    } else if (el.type === 'text') {
+      const tw = el.width || 100, th = el.fontSize || 20;
+      if (localPos.x >= -threshold && localPos.x <= tw + threshold && localPos.y >= -threshold && localPos.y <= th + threshold) return true;
+      if (localLastPos && (localLastPos.x >= -threshold && localLastPos.x <= tw + threshold && localLastPos.y >= -threshold && localLastPos.y <= th + threshold)) return true;
     }
-
-    if (elementsChanged) {
-      setElements(nextElements, false);
-    }
+    return false;
   };
 
   // Unified pointer-down handler (works for both mouse and touch)
@@ -429,68 +497,11 @@ const CanvasEngine = () => {
     if (tool === 'eraser' && !ctrlPressed) {
       setIsDrawing(true);
       setEraserPath([pos.x, pos.y]);
-      setElementsToDelete(new Set()); // Start fresh
-
-      const baseThreshold = 3;
-      const dts = (p, v, w) => {
-        const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-        if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
-        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-        t = Math.max(0, Math.min(1, t));
-        return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
-      };
+      setElementsToDelete(new Set());
 
       for (let i = elements.length - 1; i >= 0; i--) {
-        const el = elements[i];
-        const ex = el.x || 0;
-        const ey = el.y || 0;
-        const localPos = { x: pos.x - ex, y: pos.y - ey };
-        let isHit = false;
-        
-        const sw = el.strokeWidth || 2;
-        const threshold = baseThreshold + sw / 2;
-
-        if (el.type === 'pencil' || el.type === 'line' || el.type === 'arrow') {
-          if (el.points) {
-            for (let j = 0; j < el.points.length - 2; j += 2) {
-              if (dts(localPos, {x:el.points[j], y:el.points[j+1]}, {x:el.points[j+2], y:el.points[j+3]}) < threshold) { isHit = true; break; }
-            }
-          }
-        } else if (el.type === 'rect') {
-          const w = el.width || 0, h = el.height || 0;
-          if (dts(localPos, {x:0, y:0}, {x:w, y:0}) < threshold || dts(localPos, {x:w, y:0}, {x:w, y:h}) < threshold ||
-              dts(localPos, {x:w, y:h}, {x:0, y:h}) < threshold || dts(localPos, {x:0, y:h}, {x:0, y:0}) < threshold) isHit = true;
-        } else if (el.type === 'circle') {
-          const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
-          if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
-        } else if (['triangle', 'diamond', 'pentagon', 'hexagon'].includes(el.type)) {
-          const r = el.radius || 0;
-          const sides = el.type === 'triangle' ? 3 : (el.type === 'diamond' ? 4 : (el.type === 'pentagon' ? 5 : 6));
-          const pts = [];
-          for (let n = 0; n < sides; n++) {
-            const angle = (n * 2 * Math.PI) / sides;
-            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
-          }
-          for (let n = 0; n < pts.length; n++) {
-            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
-          }
-        } else if (el.type === 'star') {
-          const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
-          const pts = [];
-          for (let n = 0; n < 10; n++) {
-            const r = n % 2 === 0 ? r1 : r2;
-            const angle = (n * Math.PI) / 5;
-            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
-          }
-          for (let n = 0; n < pts.length; n++) {
-            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
-          }
-        } else if (el.type === 'text') {
-          if (localPos.x >= -baseThreshold && localPos.x <= (el.width || 100) + baseThreshold && localPos.y >= -baseThreshold && localPos.y <= (el.fontSize || 20) + baseThreshold) isHit = true;
-        }
-
-        if (isHit) {
-          setElementsToDelete(new Set([el.id]));
+        if (checkObjectHit(elements[i], pos, null)) {
+          setElementsToDelete(new Set([elements[i].id]));
           break;
         }
       }
@@ -600,79 +611,28 @@ const CanvasEngine = () => {
     }
 
     if (tool === 'eraser' && isDrawing && !ctrlPressed) {
-      const baseThreshold = 3; 
-      
-      const dts = (p, v, w) => {
-        const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
-        if (l2 === 0) return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
-        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-        t = Math.max(0, Math.min(1, t));
-        return Math.sqrt(Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) + Math.pow(p.y - (v.y + t * (w.y - v.y)), 2));
-      };
+      const lastPos = eraserPath && eraserPath.length >= 2 ? { x: eraserPath[eraserPath.length - 2], y: eraserPath[eraserPath.length - 1] } : null;
 
-      for (let i = elements.length - 1; i >= 0; i--) {
-        const el = elements[i];
-        if (elementsToDelete.has(el.id)) continue;
-
-        let isHit = false;
-        const ex = el.x || 0;
-        const ey = el.y || 0;
-        const localPos = { x: pos.x - ex, y: pos.y - ey };
-        
-        // Account for visual thickness of the stroke
-        const sw = el.strokeWidth || 2;
-        const threshold = baseThreshold + sw / 2;
-
-        if (el.type === 'pencil' || el.type === 'line' || el.type === 'arrow') {
-          if (el.points) {
-            for (let j = 0; j < el.points.length - 2; j += 2) {
-              const p1 = { x: el.points[j], y: el.points[j+1] };
-              const p2 = { x: el.points[j+2], y: el.points[j+3] };
-              if (dts(localPos, p1, p2) < threshold) { isHit = true; break; }
-            }
+      // Use functional update to find and mark elements to delete
+      setElements((prevElements) => {
+        let hitId = null;
+        for (let i = prevElements.length - 1; i >= 0; i--) {
+          const el = prevElements[i];
+          if (checkObjectHit(el, pos, lastPos)) {
+            hitId = el.id;
+            break;
           }
-        } else if (el.type === 'rect') {
-          const w = el.width || 0, h = el.height || 0;
-          if (dts(localPos, {x:0, y:0}, {x:w, y:0}) < threshold || dts(localPos, {x:w, y:0}, {x:w, y:h}) < threshold ||
-              dts(localPos, {x:w, y:h}, {x:0, y:h}) < threshold || dts(localPos, {x:0, y:h}, {x:0, y:0}) < threshold) isHit = true;
-        } else if (el.type === 'circle') {
-          const dist = Math.sqrt(Math.pow(localPos.x, 2) + Math.pow(localPos.y, 2));
-          if (Math.abs(dist - (el.radius || 0)) < threshold) isHit = true;
-        } else if (['triangle', 'diamond', 'pentagon', 'hexagon'].includes(el.type)) {
-          const r = el.radius || 0;
-          const sides = el.type === 'triangle' ? 3 : (el.type === 'diamond' ? 4 : (el.type === 'pentagon' ? 5 : 6));
-          const pts = [];
-          for (let n = 0; n < sides; n++) {
-            const angle = (n * 2 * Math.PI) / sides;
-            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
-          }
-          for (let n = 0; n < pts.length; n++) {
-            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
-          }
-        } else if (el.type === 'star') {
-          const r1 = el.outerRadius || 0, r2 = el.innerRadius || 0;
-          const pts = [];
-          for (let n = 0; n < 10; n++) {
-            const r = n % 2 === 0 ? r1 : r2;
-            const angle = (n * Math.PI) / 5;
-            pts.push({ x: r * Math.sin(angle), y: -r * Math.cos(angle) });
-          }
-          for (let n = 0; n < pts.length; n++) {
-            if (dts(localPos, pts[n], pts[(n+1) % pts.length]) < threshold) { isHit = true; break; }
-          }
-        } else if (el.type === 'text') {
-          if (localPos.x >= -baseThreshold && localPos.x <= (el.width || 100) + baseThreshold && localPos.y >= -baseThreshold && localPos.y <= (el.fontSize || 20) + baseThreshold) isHit = true;
         }
-
-        if (isHit) {
+        
+        if (hitId) {
           setElementsToDelete(prev => {
             const next = new Set(prev);
-            next.add(el.id);
+            next.add(hitId);
             return next;
           });
-          break;
         }
-      }
+        return prevElements;
+      }, false);
       return;
     }
 
@@ -706,40 +666,38 @@ const CanvasEngine = () => {
     // Reset pinch state
     setLastPinchDist(null);
 
-    if (tool === 'eraser' && isDrawing) {
-      if (elementsToDelete.size > 0) {
-        const remainingElements = elements.filter(el => !elementsToDelete.has(el.id));
-        setElements(remainingElements, true);
-      }
-      setEraserPath(null);
-      setElementsToDelete(new Set());
-    }
-
     if (tool === 'precision-eraser' && isDrawing) {
       setEraserPath(null);
-      // We don't need elementsToDelete for precision eraser as it's real-time,
-      // but we should commit the final state to history here.
-      setElements([...elements], true); 
+      setElements(prev => prev, true); 
     }
 
-    if (!isDrawing) return;
-    setIsDrawing(false);
+    if (tool === 'eraser' && isDrawing && !ctrlPressed) {
+      if (elementsToDelete.size > 0) {
+        setElements(prev => prev.filter(el => !elementsToDelete.has(el.id)), true);
+      }
+      setElementsToDelete(new Set());
+      setEraserPath(null);
+    }
 
     if (currentElement) {
-      const finalElement = { ...currentElement };
-      if (finalElement.type === 'pencil' && finalElement.points) {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (let i = 0; i < finalElement.points.length; i += 2) {
-          const x = finalElement.points[i];
-          const y = finalElement.points[i + 1];
-          if (x < minX) minX = x; if (x > maxX) maxX = x;
-          if (y < minY) minY = y; if (y > maxY) maxY = y;
+      setElements(prev => {
+        const finalElement = { ...currentElement };
+        if (finalElement.type === 'pencil' && finalElement.points) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (let i = 0; i < finalElement.points.length; i += 2) {
+            const px = finalElement.points[i];
+            const py = finalElement.points[i + 1];
+            if (px < minX) minX = px; if (px > maxX) maxX = px;
+            if (py < minY) minY = py; if (py > maxY) maxY = py;
+          }
+          finalElement.bbox = { minX, minY, maxX, maxY };
         }
-        finalElement.bbox = { minX, minY, maxX, maxY };
-      }
-      setElements([...elements, finalElement], true);
+        return [...prev, finalElement];
+      }, true);
       setCurrentElement(null);
     }
+
+    setIsDrawing(false);
   };
 
   const handleTextareaChange = (e) => {
@@ -756,37 +714,37 @@ const CanvasEngine = () => {
     const width = textareaRef.current ? textareaRef.current.offsetWidth / scale : undefined;
 
     if (textInput && textInput.value.trim() !== '') {
-      if (textInput.id && elements.find(el => el.id === textInput.id)) {
-        const updatedElements = elements.map(e =>
-          e.id === textInput.id ? { 
-            ...e, 
-            text: textInput.value, 
+      setElements(prev => {
+        if (textInput.id && prev.find(el => el.id === textInput.id)) {
+          return prev.map(e =>
+            e.id === textInput.id ? { 
+              ...e, 
+              text: textInput.value, 
+              width,
+              fontSize: fontSize || e.fontSize,
+              fontFamily: fontFamily || e.fontFamily,
+              stroke: strokeColor || e.stroke,
+              fill: strokeColor || e.fill
+            } : e
+          );
+        } else {
+          const newElement = {
+            id: textInput.id || uuidv4(),
+            type: 'text',
+            x: textInput.x,
+            y: textInput.y,
             width,
-            fontSize: fontSize || e.fontSize,
-            fontFamily: fontFamily || e.fontFamily,
-            stroke: strokeColor || e.stroke,
-            fill: strokeColor || e.fill
-          } : e
-        );
-        setElements(updatedElements, true);
-      } else {
-        const newElement = {
-          id: textInput.id || uuidv4(),
-          type: 'text',
-          x: textInput.x,
-          y: textInput.y,
-          width,
-          text: textInput.value,
-          stroke: strokeColor,
-          fill: strokeColor,
-          fontSize: fontSize || 20,
-          fontFamily: fontFamily || 'sans-serif',
-        };
-        setElements([...elements, newElement], true);
-      }
+            text: textInput.value,
+            stroke: strokeColor,
+            fill: strokeColor,
+            fontSize: fontSize || 20,
+            fontFamily: fontFamily || 'sans-serif',
+          };
+          return [...prev, newElement];
+        }
+      }, true);
     } else if (textInput && textInput.id) {
-      const updatedElements = elements.filter(e => e.id !== textInput.id);
-      setElements(updatedElements, true);
+      setElements(prev => prev.filter(e => e.id !== textInput.id), true);
     }
     setTextInput(null);
   };
@@ -872,8 +830,8 @@ const CanvasEngine = () => {
   };
 
   const handleDragEnd = (e) => {
-    handleDragMove(e); // Ensure final position is set
-    setElements(elements, true); // Add final state to history
+    // Add final state to history
+    setElements(prev => prev, true);
     setChildElements([]);
   };
 
@@ -886,22 +844,24 @@ const CanvasEngine = () => {
     node.scaleX(1);
     node.scaleY(1);
 
-    const updatedElements = elements.map(el => {
+    setElements(prev => prev.map(el => {
       if (el.id === node.id()) {
         return {
           ...el,
           x: node.x(),
           y: node.y(),
+          rotation: node.rotation(),
           width: el.width ? Math.max(5, el.width * scaleX) : undefined,
           height: el.height ? Math.max(5, el.height * scaleY) : undefined,
           radius: el.radius ? Math.max(5, el.radius * scaleX) : undefined,
           innerRadius: el.innerRadius ? Math.max(2, el.innerRadius * scaleX) : undefined,
           outerRadius: el.outerRadius ? Math.max(5, el.outerRadius * scaleX) : undefined,
+          scaleX: el.type === 'pencil' ? (el.scaleX || 1) * scaleX : 1,
+          scaleY: el.type === 'pencil' ? (el.scaleY || 1) * scaleY : 1,
         };
       }
       return el;
-    });
-    setElements(updatedElements, true);
+    }), true);
   };
 
   const renderElement = (el) => {
@@ -910,43 +870,46 @@ const CanvasEngine = () => {
     const commonProps = {
       id: el.id,
       key: el.id,
+      x: el.x || 0,
+      y: el.y || 0,
+      rotation: el.rotation || 0,
+      scaleX: el.scaleX || 1,
+      scaleY: el.scaleY || 1,
       draggable: tool === 'select' || ctrlPressed,
       onDragStart: handleDragStart,
       onDragMove: handleDragMove,
       onDragEnd: handleDragEnd,
       onTransformEnd: handleTransformEnd,
       opacity: isMarkedForDeletion ? 0.3 : 1,
-      stroke: isMarkedForDeletion ? '#ff4d4d' : undefined, // Override stroke if marked
+      stroke: isMarkedForDeletion ? '#ff4d4d' : undefined,
     };
 
     switch (el.type) {
       case 'pencil':
         if (!el.points || el.points.length < 2) return null;
-        return <Line {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} tension={0.5} lineCap="round" lineJoin="round" x={el.x || 0} y={el.y || 0} />;
+        return <Line {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} tension={0.5} lineCap="round" lineJoin="round" />;
       case 'line':
-        return <Line {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} x={el.x || 0} y={el.y || 0} />;
+        return <Line {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} />;
       case 'arrow':
-        return <Arrow {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} fill={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} x={el.x || 0} y={el.y || 0} />;
+        return <Arrow {...commonProps} points={el.points} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} fill={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} />;
       case 'rect':
-        return <Rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <Rect {...commonProps} width={el.width} height={el.height} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'circle':
-        return <Circle {...commonProps} x={el.x} y={el.y} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <Circle {...commonProps} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'triangle':
-        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={3} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <RegularPolygon {...commonProps} sides={3} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'diamond':
-        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={4} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <RegularPolygon {...commonProps} sides={4} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'pentagon':
-        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={5} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <RegularPolygon {...commonProps} sides={5} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'hexagon':
-        return <RegularPolygon {...commonProps} x={el.x} y={el.y} sides={6} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <RegularPolygon {...commonProps} sides={6} radius={el.radius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'star':
-        return <Star {...commonProps} x={el.x} y={el.y} numPoints={5} innerRadius={el.innerRadius} outerRadius={el.outerRadius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
+        return <Star {...commonProps} numPoints={5} innerRadius={el.innerRadius} outerRadius={el.outerRadius} stroke={isMarkedForDeletion ? '#ff4d4d' : el.stroke} strokeWidth={el.strokeWidth} fill={isMarkedForDeletion ? '#ff4d4d33' : el.fill} />;
       case 'text':
         return (
           <Text
             {...commonProps}
-            x={el.x}
-            y={el.y}
             text={el.text}
             fontSize={el.fontSize || 20}
             fontFamily={el.fontFamily || 'sans-serif'}

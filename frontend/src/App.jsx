@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import CanvasEngine from './components/CanvasEngine';
 import Toolbox from './components/Toolbox';
 import AuthPage from './components/AuthPage';
+import useCollaboration from './hooks/useCollaboration';
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('sd_token');
@@ -15,6 +16,20 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const CanvasPage = () => {
+  const { joinRoom } = useCollaboration();
+
+  React.useEffect(() => {
+    const handleJoin = (e) => joinRoom(e.detail);
+    window.addEventListener('join-room', handleJoin);
+    
+    // Check URL for room parameter
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room');
+    if (room) joinRoom(room);
+
+    return () => window.removeEventListener('join-room', handleJoin);
+  }, [joinRoom]);
+
   return (
     <>
       <Toolbox />

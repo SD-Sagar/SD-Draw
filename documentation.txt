@@ -30,11 +30,22 @@ Key Features:
    - Full JWT-based login and registration system.
    - Canvases are uniquely tied to your specific user account. 
    - Backend includes a powerful "in-memory" fallback mechanism allowing the app to run without MongoDB (data rests in RAM until restart).
-5. State Control:
+5. Real-time Collaboration:
+   - Peer-to-peer canvas synchronization powered by PeerJS.
+   - Low-latency data exchange for elements, transformations, and deletions.
+   - Secure Guest-mode support for rapid entry.
+6. State Control:
    - Comprehensive Undo/Redo stack (Ctrl+Z, Ctrl+Y).
    - "Delete" or "Backspace" selected elements instantly.
-6. Export:
+7. Advanced Eraser Logic:
+   - Object Eraser: Fast, swipe-based deletion of entire vector shapes.
+   - Precision Eraser: Real-time geometric splitting of pencil lines into smaller segments.
+8. Export:
    - Save the active viewport directly to a high-resolution PNG.
+9. Branding & Licensing:
+   - Signature "Sagar Dey" trademark footer in authentication and dashboard.
+   - Custom license: Free for personal use; PAID license required for commercial/business use.
+   - Resale and removal of branding are strictly prohibited.
 
 Directory Structure:
 --------------------
