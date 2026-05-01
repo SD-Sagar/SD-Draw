@@ -696,3 +696,54 @@
     display: none;
   }
 }
+
+/* ====== Custom Color Picker (touch-dismiss fix) ====== */
+.color-swatch-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  cursor: pointer;
+  padding: 0;
+  display: block;
+}
+
+.color-swatch-btn:hover {
+  border-color: #888;
+}
+
+/* Full-screen invisible backdrop — tapping it closes the picker */
+.color-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: transparent;
+}
+
+/* Small popup above the swatch */
+.color-picker-popup {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 201;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  min-width: 80px;
+}
+
+@media (max-width: 600px) {
+  .color-picker-popup {
+    bottom: calc(100% + 8px);
+    left: 0;
+    transform: none;
+  }
+}
