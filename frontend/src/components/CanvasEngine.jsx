@@ -934,7 +934,9 @@ const CanvasEngine = () => {
         width: '100vw',
         height: '100vh',
         overflow: 'hidden',
-        cursor: tool === 'select' ? 'default' : (tool === 'text' ? 'text' : 'crosshair'),
+        cursor: ctrlPressed 
+          ? (isDrawing ? 'grabbing' : 'grab') 
+          : (tool === 'select' ? 'default' : (tool === 'text' ? 'text' : 'crosshair')),
         touchAction: 'none'
       }}
     >
