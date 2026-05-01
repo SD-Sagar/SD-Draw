@@ -594,7 +594,7 @@
 .toolbox-toggle-btn {
   position: absolute;
   top: 50%;
-  left: 125px; /* Precisely outside the toolbox edge */
+  left: calc(125px + 30px); /* 30px offset to stay at toolbar's right edge */
   transform: translateY(-50%);
   z-index: 110;
   background-color: var(--charcoal-light);
