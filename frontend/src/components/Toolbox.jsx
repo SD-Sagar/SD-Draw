@@ -3,7 +3,8 @@ import {
   MousePointer2, Pencil, Eraser, Square, Circle, Triangle, Star, 
   Type, Undo2, Redo2, Download, Save, FolderOpen, LogOut,
   Minus, ArrowRight, Plus, Minus as MinusIcon, PencilLine,
-  Diamond, Pentagon, Hexagon, Users, Copy, Check, Link
+  Diamond, Pentagon, Hexagon, Users, Copy, Check, Link,
+  ChevronLeft, ChevronRight, Keyboard, Info
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -24,6 +25,7 @@ const Toolbox = () => {
   
   const [roomInput, setRoomInput] = React.useState('');
   const [copied, setCopied] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
 
   const navigate = useNavigate();
 
@@ -106,9 +108,30 @@ const Toolbox = () => {
   const showTextSettings = tool === 'text';
   const showPrecisionSettings = tool === 'precision-eraser';
 
+  const handleShowShortcuts = () => {
+    alert(
+      "SD-Draw Keyboard Shortcuts:\n" +
+      "---------------------------\n" +
+      "• Ctrl + Left Click Hold: Pan Canvas\n" +
+      "• Middle Click Drag: Pan Canvas\n" +
+      "• Ctrl + Z: Undo\n" +
+      "• Ctrl + Y / Ctrl + Shift + Z: Redo\n" +
+      "• Delete / Backspace: Delete Selected\n" +
+      "• Double Click (or Select + Click): Edit Text"
+    );
+  };
+
   return (
   <>
-    <div className="toolbox-container">
+    <button 
+      className={`toolbox-toggle-btn ${isCollapsed ? 'collapsed' : ''}`}
+      onClick={() => setIsCollapsed(!isCollapsed)}
+      title={isCollapsed ? "Show Toolbox" : "Hide Toolbox"}
+    >
+      {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+    </button>
+
+    <div className={`toolbox-container ${isCollapsed ? 'collapsed' : ''}`}>
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0', animation: 'pulse 2s infinite ease-in-out', position: 'relative' }} title="SD-Draw">
         <Logo size={40} />
         {isGuest && <div style={{ position: 'absolute', bottom: -5, right: 0, fontSize: '8px', background: '#A855F7', color: 'white', padding: '1px 4px', borderRadius: '4px', fontWeight: 'bold' }}>GUEST</div>}
@@ -179,8 +202,15 @@ const Toolbox = () => {
         >
           <FolderOpen size={18} />
         </button>
-        <button className="action-btn" title="Export to PNG" onClick={() => window.dispatchEvent(new CustomEvent('export-canvas'))} style={{ gridColumn: 'span 2' }}>
+        <button className="action-btn" title="Export to PNG" onClick={() => window.dispatchEvent(new CustomEvent('export-canvas'))}>
           <Download size={18} />
+        </button>
+        <button 
+          className="action-btn keyboard-btn" 
+          title="Shortcut Tips" 
+          onClick={handleShowShortcuts}
+        >
+          <Keyboard size={18} />
         </button>
       </div>
 
@@ -247,7 +277,7 @@ const Toolbox = () => {
     </div>
 
     {/* Floating Settings Popup */}
-    {(showStrokeSettings || showTextSettings || showPrecisionSettings) && (
+    {!isCollapsed && (showStrokeSettings || showTextSettings || showPrecisionSettings) && (
       <div className="tool-settings-popup">
         {showStrokeSettings && (
           <div className="settings-group">

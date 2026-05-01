@@ -17,7 +17,7 @@ Architecture:
 Key Features:
 -------------
 1. Infinite Canvas Engine:
-   - Middle-click to pan infinitely across the canvas.
+   - Middle-click OR Hold Ctrl + Left Click to pan infinitely (shows hand-grab cursor).
    - Scroll wheel to zoom in and out smoothly directly to the mouse cursor position.
 2. Vector Drawing Tools:
    - Freehand Pencil and Eraser tools (with dynamic stroke thickness).
