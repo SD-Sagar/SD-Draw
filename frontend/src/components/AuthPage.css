@@ -272,3 +272,51 @@
     gap: 0.6rem;
   }
 }
+
+/* ====== TRADEMARK STYLES ====== */
+.auth-footer {
+  margin-top: 2.5rem;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 1.5rem;
+}
+
+.trademark-text {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-align: center;
+  transition: all 0.3s ease;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.trademark-text:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.copyright-icon {
+  font-size: 1rem;
+  background: linear-gradient(135deg, #007BFF, #A855F7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+  margin-right: 2px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+@media (max-width: 480px) {
+  .auth-footer {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+  }
+  
+  .trademark-text {
+    font-size: 0.6rem;
+    letter-spacing: 1.5px;
+  }
+}

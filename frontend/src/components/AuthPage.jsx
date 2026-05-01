@@ -88,6 +88,12 @@ const AuthPage = () => {
         >
           Try Guest Mode
         </button>
+
+        <div className="auth-footer">
+          <p className="trademark-text">
+            <span className="copyright-icon">&copy;</span>{new Date().getFullYear()} Sagar dey. All rights reserved.
+          </p>
+        </div>
       </div>
     </div>
   );

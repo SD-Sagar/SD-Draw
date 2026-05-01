@@ -37,8 +37,10 @@ const useCanvasStore = create((set, get) => ({
     connections: state.connections.filter(c => c.peer !== peerId) 
   })),
   
-  setElements: (elements, addToHistory = true, isRemote = false) => {
+  setElements: (elementsOrFn, addToHistory = true, isRemote = false) => {
     set((state) => {
+      const elements = typeof elementsOrFn === 'function' ? elementsOrFn(state.elements) : elementsOrFn;
+      
       if (!addToHistory) return { elements, lastUpdateRemote: isRemote };
       
       const newHistory = state.history.slice(0, state.historyStep + 1);
@@ -75,14 +77,22 @@ const useCanvasStore = create((set, get) => ({
     });
   },
   
-  clearStore: () => set({ 
-    elements: [], 
-    history: [[]], 
-    historyStep: 0,
-    connections: [],
-    isCollaborating: false,
-    peerId: null
-  })
+  clearStore: () => {
+    const { connections } = get();
+    connections.forEach(conn => {
+      if (conn.open) conn.close();
+    });
+    
+    set({ 
+      elements: [], 
+      history: [[]], 
+      historyStep: 0,
+      connections: [],
+      isCollaborating: false,
+      peerId: null,
+      lastUpdateRemote: false
+    });
+  }
 }));
 
 export default useCanvasStore;

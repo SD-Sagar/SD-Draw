@@ -182,9 +182,6 @@ const Toolbox = () => {
         <button className="action-btn" title="Export to PNG" onClick={() => window.dispatchEvent(new CustomEvent('export-canvas'))} style={{ gridColumn: 'span 2' }}>
           <Download size={18} />
         </button>
-        <button className="action-btn" title="Logout" onClick={handleLogout} style={{ gridColumn: 'span 2', color: '#ff4d4d' }}>
-          <LogOut size={18} />
-        </button>
       </div>
 
       <div className="toolbox-divider"></div>
@@ -237,6 +234,15 @@ const Toolbox = () => {
           <div className={`status-dot ${isCollaborating ? 'active' : ''}`}></div>
           <span>{isCollaborating ? `${connections.length} Peer(s)` : 'Solo Mode'}</span>
         </div>
+      </div>
+
+      <div className="toolbox-divider"></div>
+      
+      <div className="logout-section">
+        <button className="premium-logout-btn" onClick={handleLogout}>
+          <LogOut size={16} />
+          <span>Logout</span>
+        </button>
       </div>
     </div>
 

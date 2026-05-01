@@ -46,7 +46,14 @@ Step 3: Setup the Frontend
 
 Step 4: Launch the Application
 ------------------------------
-1. Open your web browser and navigate to the URL provided by Vite (typically http://localhost:5173/ or http://localhost:5174/).
+1. Open your web browser and navigate to the URL provided by Vite (typically http://localhost:5173/).
 2. You will be greeted by the Login page. 
-3. Click "Register here" to create your first account.
+3. Click "Register here" to create your first account, or use "Try Guest Mode".
 4. Enjoy infinite vector drawing!
+
+Step 5: Real-time Collaboration
+-------------------------------
+1. Once logged in, click the "Collab" section in the toolbox.
+2. Share your "Your ID" with a friend.
+3. Your friend can enter your ID in their "Join Peer ID" box and click "Join".
+4. Any changes made by either user will sync in real-time across the PeerJS network.
