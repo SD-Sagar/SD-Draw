@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Transformer, RegularPolygon, Star, Group } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import useCanvasStore from '../store/useCanvasStore';
+import useCollaboration from '../hooks/useCollaboration';
 
 const CanvasEngine = () => {
   const { 
@@ -10,8 +11,10 @@ const CanvasEngine = () => {
     eraserSize, setEraserSize, precisionEraserSize, setPrecisionEraserSize,
     canvasBgColor, setCanvasBgColor, 
     fontSize, setFontSize, fontFamily, setFontFamily, 
-    undo, redo 
+    undo, redo, isCollaborating, lastUpdateRemote
   } = useCanvasStore();
+
+  const { broadcast } = useCollaboration();
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
@@ -28,6 +31,13 @@ const CanvasEngine = () => {
   const trRef = useRef(null);
   const textareaRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Collaboration Broadcast
+  useEffect(() => {
+    if (isCollaborating && !lastUpdateRemote) {
+      broadcast({ type: 'ELEMENTS_UPDATE', elements });
+    }
+  }, [elements, isCollaborating, lastUpdateRemote, broadcast]);
 
   useEffect(() => {
     if (textInput && textareaRef.current) {

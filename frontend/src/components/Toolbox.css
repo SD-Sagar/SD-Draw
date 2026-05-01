@@ -417,3 +417,122 @@
     padding: 5px;
   }
 }
+
+/* Collaboration Section */
+.collab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.peer-id-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.peer-id-container label {
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.peer-id-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--text-primary);
+  gap: 8px;
+}
+
+.peer-id-box span {
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+}
+
+.join-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.room-input {
+  background: #111;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 6px;
+  outline: none;
+  width: 100%;
+}
+
+.room-input:focus {
+  border-color: var(--sagar-blue);
+}
+
+.join-btn {
+  background: var(--sagar-blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.join-btn:hover {
+  opacity: 0.9;
+}
+
+.collab-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #444;
+}
+
+.status-dot.active {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+@media (max-width: 600px) {
+  .collab-section {
+    display: none; /* Hide in mobile bottom bar to save space */
+  }
+}
