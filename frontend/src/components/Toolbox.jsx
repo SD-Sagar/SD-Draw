@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Keyboard, Info, PaintBucket
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { supabase } from '../utils/supabaseClient';
 import useCanvasStore from '../store/useCanvasStore';
 import Logo from './Logo';
 import './Toolbox.css';
@@ -70,41 +70,48 @@ const Toolbox = () => {
 
   const handleSave = async () => {
     try {
-      const token = localStorage.getItem('sd_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      await axios.put('/api/canvas', { elements }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { error } = await supabase
+        .from('canvases')
+        .upsert({ user_id: session.user.id, elements });
+
+      if (error) throw error;
       alert('Canvas saved successfully!');
     } catch (e) {
       alert('Error saving canvas. Make sure you are logged in.');
+      console.error(e);
     }
   };
 
   const handleLoad = async () => {
     try {
-      const token = localStorage.getItem('sd_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      const res = await axios.get('/api/canvas', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.data) {
-        // Backend returns elements array directly
-        setElements(res.data, false);
+      const { data, error } = await supabase
+        .from('canvases')
+        .select('elements')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      if (data && data.elements) {
+        setElements(data.elements, false);
         alert('Canvas loaded!');
+      } else {
+        alert('No saved canvas found.');
       }
     } catch (e) {
-      if (e.response && e.response.status === 404) {
-        alert('No saved canvas found.');
-      } else {
-        alert('Error loading canvas. Make sure you are logged in.');
-      }
+      alert('Error loading canvas. Make sure you are logged in.');
+      console.error(e);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('sd_token');
     localStorage.removeItem('sd_user');
     localStorage.removeItem('sd_guest');

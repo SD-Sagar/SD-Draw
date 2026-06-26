@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { supabase } from '../utils/supabaseClient';
 import Logo from './Logo';
 import './AuthPage.css';
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -14,15 +14,32 @@ const AuthPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     
     try {
-      const res = await axios.post(endpoint, { username, password });
-      localStorage.setItem('sd_token', res.data.token);
-      localStorage.setItem('sd_user', res.data.username);
-      navigate('/draw');
+      let data, errorObj;
+      
+      if (isLogin) {
+        const res = await supabase.auth.signInWithPassword({ email, password });
+        data = res.data;
+        errorObj = res.error;
+      } else {
+        const res = await supabase.auth.signUp({ email, password });
+        data = res.data;
+        errorObj = res.error;
+      }
+
+      if (errorObj) throw errorObj;
+      
+      if (data.session) {
+        localStorage.setItem('sd_token', data.session.access_token);
+        localStorage.setItem('sd_user', data.user.email.split('@')[0]); // Use part of email as username display
+        navigate('/draw');
+      } else if (!isLogin) {
+        // If confirm email is enabled in Supabase
+        setError('Account created! Please check your email to verify.');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Authentication failed. Make sure backend is running.');
+      setError(err.message || 'Authentication failed. Please check your credentials.');
     }
   };
 
@@ -39,13 +56,13 @@ const AuthPage = () => {
           {error && <div className="auth-error">{error}</div>}
           
           <div className="form-group">
-            <label>Username</label>
+            <label>Email</label>
             <input 
-              type="text" 
+              type="email" 
               required 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
             />
           </div>
 
